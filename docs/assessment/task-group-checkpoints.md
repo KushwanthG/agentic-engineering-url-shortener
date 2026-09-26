@@ -112,3 +112,37 @@ all tests green.
 **Pre-commit review**: one coherent feature (US1) plus the package restructure requested by the
 candidate and one defect fix in the audit trail found by the Phase 3 runs; no contract changes;
 security rules unchanged (deny-by-default; redirect route public by design); all tests green.
+
+---
+
+## Checkpoint: Phase 4 — US2 orchestration core and SCN-A (T034–T058, T129–T131)
+
+| # | Item | Record |
+|---|------|--------|
+| 1 | Completed tasks | T034–T058, T129, T130, T131 |
+| 2 | Requirements addressed | as tagged on the Phase 4 tests: FR-AUD-03, FR-AUD-06, FR-CAP-01, FR-CAP-02, FR-GOV-01, FR-GOV-03, FR-GOV-08, FR-GOV-09, FR-ORC-01, FR-ORC-02, FR-ORC-03, FR-ORC-04, FR-ORC-05, FR-ORC-06, FR-ORC-07, FR-ORC-08, FR-ORC-09, FR-ORC-10, FR-ORC-11, FR-ORC-12, FR-ORC-13, FR-ORC-14, FR-ORC-15, FR-ORC-16, FR-ORC-17, FR-POL-01, FR-POL-02, FR-POL-03, FR-POL-05, FR-POL-06, FR-RDY-01, FR-RDY-03, FR-RDY-04, FR-REL-05, FR-RPL-03, NFR-AUD-01, NFR-AUT-01, NFR-CHG-01, NFR-SEC-01, NFR-SEC-05, SC-002, SCN-A, SCN-B, SCN-C (SCN-B/SCN-C tags are agent-level tests on those inputs only; their end-to-end scenarios are Phases 7–8); SC-009 for SCN-A evidence |
+| 3 | ADRs followed | ADR-001 (planes; only `orchestration.integration` calls the shortener), ADR-005 (persisted DAG engine), ADR-007 (state machines), ADR-008 (human gates), ADR-010 (synthetic-data compensation by run), ADR-017 (deterministic agents), ADR-018 (capability release and preview) |
+| 4 | Files created or changed | `orchestration/{domain,repository,engine,planning,agent,agent/probes,port,integration,knowledge,policy,governance,service,controller,dto,config}/*`; shortener alias support (`AliasPolicy`, `CustomAliasCapability`, `CapabilityChange`, alias path in `LinkCreationService`, `ShortLink`, `Capability`, DTOs, `ShortenerConfig`); `res/db/migration/V3__custom_alias.sql`; `res/orchestration/{capability-catalog,ambiguity-lexicon,policy-set}.yaml`; `res/scenarios/scn-a-greenfield.json`; tests under `orchestration/*`, `e2e/ScenarioAGreenfieldE2ETest`, `contract/WorkflowApiContractTest`, `contract/OpenApiContract` (harness), `support/*`; `docs/api/links.md`, `docs/scenarios/scn-a-greenfield.md`, `docs/architecture/orchestration.md` |
+| 5 | Tests written before implementation | all Phase 4 tests; red runs in `tdd-evidence.md` (compile-level per group; behavioral red for T056 and T057) |
+| 6 | Expected initial failures | missing production types per group; 404s for the workflow API; SCN-A failing until the full path worked |
+| 7 | Validation commands executed | per-group `mvnw -o test-compile` (red) and `mvnw test -Dtest=…` (green); `mvnw test -Dtest=ScenarioAGreenfieldE2ETest`; `mvnw clean verify` offline (failed, SBOM skipped) and online |
+| 8 | Actual outcomes | `mvnw -B -ntp verify` (online): 343 tests, 0 failures, 0 errors, SBOM generated, BUILD SUCCESS; SCN-A `COMPLETED` / `READY`; evidence E-A1..E-A9 in `target/evidence/scn-a/` |
+| 9 | Documentation updated | `docs/scenarios/scn-a-greenfield.md`, `docs/architecture/orchestration.md` (new); `docs/api/links.md` (alias); `tdd-evidence.md`; gate register pending items |
+| 10 | Traceability updated | tests tagged with FR/SC/SCN ids (`SCN-A` on the end-to-end test); tasks T034–T058, T129–T131 marked |
+| 11 | Deviations from plan | (a) stage transition `PENDING → FAILED` added for unmet entry criteria. It is not in the `data-model.md` diagram and was raised for review, not changed silently. (b) `QualityChecks.java` not created: the five checks are private methods of `RequirementAnalysisAgent`. (c) New `SyntheticScope`: the parallel probe stages of one run serialize their probe-and-cleanup section, because ADR-010 cleans up synthetic data by run. The two stages still dispatch in one cycle. This was found by SCN-A. (d) The contract test harness merges `allOf` before validation (`withResolveCombinators(true)`); `openapi.yaml` is unchanged. (e) SCN-A checks audit integrity through `AuditService.verify` inside the test JVM, because the evidence API (`EvidenceController`) is Phase 9. Everything else in the scenario goes over HTTP. |
+| 12 | New risks | (1) `SyntheticScope` is an in-process lock. It is valid for the single-process H2 deployment (ADR-003) and must be revisited with a server database, like the audit-head guard (BL-02). (2) The full build must run online: offline Maven skips the CycloneDX SBOM, and policy LIC-001 then fails. |
+| 13 | New assumptions | none |
+| 14 | Remaining failures | none |
+| 15 | Commit boundary | Phase 4 |
+| 16 | Commit message | `feat(orchestration): implement governed workflow engine, agents, and SCN-A` |
+| 17 | Next task group | Phase 5 US3 — govern high-impact decisions (T059–T066) |
+| 18 | Human approval required | the state-model refinement (a) and deviations (b)–(e) for the candidate's review (gate register). Gate decisions in SCN-A are simulated demo-principal input, not approvals. G1–G5 remain pending |
+
+**Pre-commit review**:
+- One coherent feature: the US2 control plane and SCN-A.
+- The shortener changes are limited to the custom-alias capability, which is released only through
+  the port.
+- No change to the contract file or the ADRs. One state-model refinement was raised for review.
+- The plane boundary is enforced by ArchUnit. Agents are permission-scoped.
+- The simulated approvals are labeled in the test, the decisions, and the evidence.
+- All tests are green.

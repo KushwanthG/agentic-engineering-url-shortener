@@ -8,8 +8,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Tag;
@@ -24,8 +26,10 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import com.agentic.urlshortener.shortener.domain.Capability;
 import com.agentic.urlshortener.shortener.dto.CreateLinkCommand;
 import com.agentic.urlshortener.shortener.repository.ShortLinkRepository;
+import com.agentic.urlshortener.shortener.service.CapabilityService;
 import com.agentic.urlshortener.shortener.service.LinkCreationService;
 import com.agentic.urlshortener.support.ControllableTestConfig;
 import com.agentic.urlshortener.support.IntegrationTest;
@@ -124,6 +128,45 @@ class LinkApiContractTest {
             assertContract("POST", "/api/v1/links", createLink(mvc, "{\"url\":\"https://example.com/2\"}", Tokens.CONSUMER, null), 429);
             mvc.perform(get("/nothere1")).andExpect(status().isNotFound());
             assertContract("GET", "/nothere2", mvc.perform(get("/nothere2")).andReturn(), 429);
+        }
+    }
+
+    /** Contract 1.1.0 (custom alias): the capability is released for these checks and withdrawn afterwards. */
+    @Nested
+    @IntegrationTest
+    @Tag("FR-CAP-02")
+    class CustomAliasReleased {
+
+        @Autowired
+        private MockMvc mvc;
+
+        @Autowired
+        private CapabilityService capabilities;
+
+        @BeforeEach
+        void release() {
+            capabilities.setRelease(Capability.CUSTOM_ALIAS, true, Map.of(), "contract-test", null, "contract test (released temporarily)");
+        }
+
+        @AfterEach
+        void withdraw() {
+            capabilities.setRelease(Capability.CUSTOM_ALIAS, false, Map.of(), "contract-test", null, "contract test cleanup");
+        }
+
+        @Test
+        void aliasResponsesMatchTheContract() throws Exception {
+            String alias = "contract-" + UUID.randomUUID().toString().substring(0, 8);
+            MvcResult created = createLink(mvc, "{\"url\":\"https://example.com/alias\",\"alias\":\"" + alias + "\"}", Tokens.CONSUMER, null);
+            assertContract("POST", "/api/v1/links", created, 201);
+            org.assertj.core.api.Assertions.assertThat(created.getResponse().getContentAsString())
+                    .contains("\"code\":\"" + alias + "\"").contains("\"customAlias\":true");
+            assertContract("POST", "/api/v1/links",
+                    createLink(mvc, "{\"url\":\"https://example.com/other\",\"alias\":\"" + alias + "\"}", Tokens.CONSUMER, null), 409);
+            assertContract("POST", "/api/v1/links",
+                    createLink(mvc, "{\"url\":\"https://example.com\",\"alias\":\"no spaces\"}", Tokens.CONSUMER, null), 400);
+            assertContract("POST", "/api/v1/links",
+                    createLink(mvc, "{\"url\":\"https://example.com\",\"alias\":\"api\"}", Tokens.CONSUMER, null), 400);
+            assertContract("GET", "/" + alias, mvc.perform(get("/" + alias)).andReturn(), 302);
         }
     }
 

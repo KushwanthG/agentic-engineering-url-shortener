@@ -41,16 +41,19 @@ public class LinkCreationService {
     private final LinkWriter writer;
     private final IdempotencyService idempotency;
     private final CapabilityService capabilities;
+    private final CustomAliasCapability customAlias;
     private final ShortenerProperties properties;
     private final Clock clock;
 
     public LinkCreationService(UrlPolicy urlPolicy, ShortCodeGenerator generator, LinkWriter writer,
-            IdempotencyService idempotency, CapabilityService capabilities, ShortenerProperties properties, Clock clock) {
+            IdempotencyService idempotency, CapabilityService capabilities, CustomAliasCapability customAlias,
+            ShortenerProperties properties, Clock clock) {
         this.urlPolicy = urlPolicy;
         this.generator = generator;
         this.writer = writer;
         this.idempotency = idempotency;
         this.capabilities = capabilities;
+        this.customAlias = customAlias;
         this.properties = properties;
         this.clock = clock;
     }
@@ -60,9 +63,7 @@ public class LinkCreationService {
         if (key != null) {
             idempotency.validateKey(key);
         }
-        if (command.alias() != null) {
-            capabilities.requireReleased(Capability.CUSTOM_ALIAS, "alias");
-        }
+        String alias = command.alias() == null ? null : customAlias.require(command.alias());
         if (command.maxClicks() != null) {
             capabilities.requireReleased(Capability.CLICK_LIMIT, "maxClicks");
         }
@@ -78,8 +79,10 @@ public class LinkCreationService {
             }
         }
 
-        for (int attempt = 1; attempt <= properties.codeGenerationAttempts(); attempt++) {
-            ShortLink link = ShortLink.create(generator.next(), target.value(), command.consumerId(), now, expiresAt);
+        // An alias is the code chosen by the consumer: one attempt; a taken alias is a conflict, not a retry.
+        int maxAttempts = alias == null ? properties.codeGenerationAttempts() : 1;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            ShortLink link = newLink(alias == null ? generator.next() : alias, target, now, expiresAt, command);
             LinkView view = LinkView.of(link, properties.baseUrl(), now);
             try {
                 writer.insert(link, key == null ? null
@@ -95,12 +98,22 @@ public class LinkCreationService {
                 if (!isCodeCollision(e)) {
                     throw e;
                 }
+                if (alias != null) {
+                    throw new ApiException(ErrorCode.ALIAS_CONFLICT, "The alias '" + alias + "' is already in use.");
+                }
                 log.info("Short-code collision on attempt {} of {}; generating a new code", attempt,
                         properties.codeGenerationAttempts());
             }
         }
         throw new ApiException(ErrorCode.CODE_GENERATION_EXHAUSTED,
                 "No unique short code could be generated; retry the request.", List.of(), 1L);
+    }
+
+    private static ShortLink newLink(String code, NormalizedUrl target, Instant now, Instant expiresAt, CreateLinkCommand command) {
+        ShortLink link = command.syntheticRunId() == null
+                ? ShortLink.create(code, target.value(), command.consumerId(), now, expiresAt)
+                : ShortLink.synthetic(code, target.value(), now, expiresAt, command.syntheticRunId());
+        return command.alias() == null ? link : link.asCustomAlias();
     }
 
     private Instant validateExpiry(Instant expiresAt, Instant now) {

@@ -287,3 +287,5 @@ and decides whether redirects may be cached.
 | Scope decision SD-1 (defer T074, T096, T107, T109, T112, T114, T115, T119) recorded from the candidate's instruction of 2026-09-26 (`docs/assessment/timebox-and-scope.md`) | candidate instruction | pending confirmation at G6 |
 | ADR-001 revision: base package `com.agentic.urlshortener`, `common` package, layered plane packages (candidate request, 2026-09-26) | candidate request | pending ADR acceptance (G4) |
 | Phase 3 implementation deviations (b)–(g) and the audit-trail concurrency fix (`task-group-checkpoints.md`, Phase 3 row 11) | Phase 3 checkpoint | pending review |
+| State-model refinement: stage transition `PENDING → FAILED` for an unmet entry criterion. Implemented and tested in `StageTransitions`, not yet in the `data-model.md` stage diagram | Phase 4 checkpoint | pending: approve (then update `data-model.md`) or reject (then remove the transition) |
+| Phase 4 implementation deviations (a)–(e) (`task-group-checkpoints.md`, Phase 4 row 11), including per-run serialization of parallel probe sections (`SyntheticScope`) under ADR-010 | Phase 4 checkpoint | pending review |

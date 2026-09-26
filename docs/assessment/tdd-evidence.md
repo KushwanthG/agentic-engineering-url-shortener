@@ -74,3 +74,50 @@ T032 `LinkApiContractTest` (201, replayed 201, 302, 200 metadata/stats, 400, 401
 `Location`; `GET /{code}` → 302, `Location` = target, `Cache-Control: no-store`; stats after 3
 redirects → `totalClicks` 3, `daily` `[{"date":"2026-09-26","clicks":3}]`; metadata-service URL
 `http://169.254.169.254/...` → 400; unknown code → 404 problem JSON with `correlationId`; readiness UP.
+
+## Phase 4 — US2 orchestration core and SCN-A (T034–T058, T129–T131)
+
+Tests were written in groups before the production classes of each group. Red runs are
+**compile-level** unless stated otherwise: they prove the tests came before the code, not that each
+assertion failed on its own. All times are 2026-09-26 UTC. Red and green outcomes were extracted
+from the session's recorded tool output. No outcome in this table is reconstructed from memory.
+
+| Tasks | Test(s) | Red run (command → observed failure) | Green run (command → result) |
+|-------|---------|--------------------------------------|------------------------------|
+| T034–T042 | `StageTransitionsTest` (37), `RunTransitionsTest` (20), `OrchestrationPersistenceTest` (3), `PlanFactoryTest` (6), `PlanValidatorTest` (7), `AgentPermissionTest` (3), `RunCoordinatorTest` (6), `GateDecisionBasicsTest` (6) | 12:44 `mvnw -o test-compile` → exit 1, 200 errors, 29 missing types (`StageStatus`, `RunStatus`, `StageNode`, `PlanValidator`, `StageAgent`, `GateService`, `WorkflowService`, …) | 12:58 `mvnw test -Dtest=StageTransitionsTest,RunTransitionsTest,OrchestrationPersistenceTest,PlanFactoryTest,PlanValidatorTest,AgentPermissionTest,RunCoordinatorTest` → 82/82; 13:00 `-Dtest=GateDecisionBasicsTest,RunCoordinatorTest` → 12/12 |
+| T043 | `ApplicationPlaneAdapterTest` (5), `PreviewIsolationTest` (4) | 13:02 `mvnw -o test-compile` → exit 1: `withPreview(Capability, Map, …)` and `parameters(Capability)` not found | 13:04 `-Dtest=ApplicationPlaneAdapterTest,PreviewIsolationTest,ArchitectureTest,LinkCreationServiceTest` → 21/21 |
+| T044–T045 | `CapabilityCatalogTest` (6), `AmbiguityLexiconTest` (3) | 13:08 first run → 6 errors: YAML `Parser while parsing a flow mapping` (unquoted values in the catalog); 13:08 second run → 6 errors: `Cannot map null into type boolean` (primitive field, catalog entry without the key) | 13:09 same command → 9/9 (values quoted; field made `Boolean`) |
+| T046–T047 | `RequirementAnalysisAgentTest` (6) | 13:11 `mvnw -o test-compile` → exit 1, missing `RequirementAnalysisAgent`, `RequirementIngestionAgent` | 13:12 `-Dtest=RequirementAnalysisAgentTest` → 6/6 |
+| T048, T129, T130 | `DecompositionAgentTest` (2), `ThreatAssessmentAgentTest` (2), `DesignAgentTest` (2), `ImplementationAgentTest` (3) | 13:14 `mvnw -o test-compile` → exit 1, missing `DecompositionAgent`, `DesignAgent`, `ImplementationAgent`, `ThreatAssessmentAgent` | 13:16 `-Dtest=DecompositionAgentTest,ThreatAssessmentAgentTest,DesignAgentTest,ImplementationAgentTest,AgentPermissionTest` → 12/12 |
+| T054–T055 | `AliasPolicyTest` (14), `LinkCreationAliasTest` (6); regression `LinkCreationServiceTest`, `LinkControllerTest`, `MigrationTest`, `IdempotencyServiceTest`, `LinkApiContractTest` | 13:17 `mvnw -o test-compile` → exit 1, missing `AliasPolicy`, `isCustomAlias()` | 13:18 `-Dtest=AliasPolicyTest,LinkCreationAliasTest,LinkCreationServiceTest,LinkControllerTest,MigrationTest,IdempotencyServiceTest` → 47/47; 13:19 `-Dtest=LinkApiContractTest` → 5/5 |
+| T049 | `TestingAgentTest` (2), `SecurityVerificationAgentTest` (1) | 13:21 `mvnw -o test-compile` → exit 1, package `orchestration.agent.probes` does not exist; missing `ProbeRegistry`, `TestingAgent`, `SecurityVerificationAgent` | 13:23 first run → 2 failures: report schema violation `required property 'description' not found` (probe results lacked it); 13:24 → 3/3 |
+| T050 | `DocumentationAgentTest` (2), `ValidationAgentTest` (2) | 16:23 `mvnw -o test-compile` → exit 1, missing `DocumentationAgent`, `ValidationAgent` | 16:24 first run → 2 failures (`DocumentationAgentTest...:36`, `ValidationAgentTest...:57`: `Expecting value to be true but was false`; the documentation fix was path normalization of repository doc anchors); 16:24 → 4/4 |
+| T051–T052 | `PolicyEngineTest` (9), `PolicyRulesTest` (12) | 16:27 `mvnw -o test-compile` → exit 1, missing `PolicyEngine`, `PolicyRule`, `ReadinessEvaluator` and 14 rule classes | 16:29 `-Dtest=PolicyEngineTest,PolicyRulesTest` → 21/21 |
+| T131 | `ComplianceEvaluationAgentTest` (2) | 16:31 `mvnw -o test-compile` → exit 1, missing `ComplianceEvaluationAgent`, `RunFacts` | 16:31 `-Dtest=ComplianceEvaluationAgentTest` → 2/2 |
+| T053 | `ReleaseAgentTest` (3), `FinalSummaryAgentTest` (1) | 16:33 `mvnw -o test-compile` → exit 1, missing `ReleaseAgent`, `FinalSummaryAgent`, `DecisionSummary` | 16:34 `-Dtest=ReleaseAgentTest,FinalSummaryAgentTest,ComplianceEvaluationAgentTest,AgentPermissionTest` → 9/9 |
+| T056 | `WorkflowApiTest` (5), `WorkflowApiContractTest` (1) | 16:42 `mvnw test -Dtest=WorkflowApiTest,WorkflowApiContractTest` → 5 failures: `Status expected:<201> but was:<404>`, `RUN_NOT_FOUND` expected but `RESOURCE_NOT_FOUND` (no controller) | 16:49 first run → 11/12: contract validator rejected `ArtifactDetail` (see note 2); 16:50 `-Dtest=*ContractTest,WorkflowApiTest,GateDecisionBasicsTest` → 17/17 |
+| T057 | `ScenarioAGreenfieldE2ETest` (1) | 16:53 `mvnw test -Dtest=ScenarioAGreenfieldE2ETest` → **behavioral red**: timeout waiting for `RELEASE_APPROVAL`; the run failed in `TESTING`/`SECURITY_VERIFICATION` with a unique-key violation on `in-use-<run>` (see note 3) | 16:58 `-Dtest=ScenarioAGreenfieldE2ETest,SyntheticScopeTest` → 3/3 (run `COMPLETED`, `READY`; E-A1..E-A9 exported) |
+| T057 (fix) | `SyntheticScopeTest` (2) | 16:56 `mvnw test -Dtest=SyntheticScopeTest` → compile error, `SyntheticScope` not found | 16:57 → 2/2 |
+
+**Notes**
+
+1. **Full suite, 16:35**: `mvnw -o clean verify` → 334 tests, 2 failures, 1 error
+   (`PolicyRulesTest.lic001PassesForTheBuildsRealSbom`: no SBOM; `ComplianceEvaluationAgentTest`
+   ×2). Diagnosis (16:37 `mvnw -o generate-resources`): `makeAggregateBom requires online mode …
+   skipping`. Offline builds do not produce the SBOM that LIC-001 evaluates. This was an
+   environment defect, not a code defect. 16:38 `mvnw clean verify` (online) → 334/334, BUILD
+   SUCCESS. Full builds must run online.
+2. **Contract harness**: the Atlassian validator adds `additionalProperties: false` to each
+   sub-schema, so `ArtifactDetail` (`allOf` = `ArtifactSummary` + detail fields) rejected every
+   property. Fix in the test harness only (`withResolveCombinators(true)` merges `allOf` before
+   validating). `openapi.yaml` is unchanged.
+3. **Defect found by SCN-A**: `TESTING` and `SECURITY_VERIFICATION` are dispatched in the same
+   scheduling cycle. Both create run-scoped synthetic aliases, and both clean up by run (ADR-010),
+   so they collided on `in-use-<run>`. One stage's cleanup could also delete the other stage's
+   in-flight probe data. The unit tests of each agent could not show this because they run one
+   stage alone. Fix: `SyntheticScope` makes the probe-and-cleanup section exclusive per run. Both
+   stages still dispatch in one cycle (asserted in SCN-A), and ADR-010 and the data model are
+   unchanged.
+
+**Final green**: 16:59 `mvnw -B -ntp verify` (online) → 343 tests, 0 failures, 0 errors, SBOM
+generated (104 components), BUILD SUCCESS.

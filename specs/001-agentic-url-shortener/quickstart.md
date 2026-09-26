@@ -36,6 +36,9 @@ $env:JAVA_HOME = "C:\Program Files\Java\jdk-21.0.12.1"   # adjust to your JDK 21
 security, architecture, and end-to-end scenario tests. The JaCoCo report is written to
 `target/site/jacoco/index.html`, and scenario evidence to `target/evidence/`.
 
+**Run the full build online** (no `-o`). In offline mode, Maven skips the CycloneDX SBOM goal. Policy
+LIC-001 evaluates that SBOM, so its tests fail when the SBOM is missing.
+
 Run only the scenario and drill end-to-end tests:
 
 ```powershell

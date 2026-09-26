@@ -24,6 +24,9 @@ public final class OpenApiContract {
 
     private static final OpenApiInteractionValidator VALIDATOR = OpenApiInteractionValidator
             .createForSpecificationUrl(specificationUrl())
+            // The validator forbids undeclared properties per sub-schema; merge allOf compositions
+            // (e.g. ArtifactDetail = ArtifactSummary + detail fields) so strictness applies to the whole.
+            .withResolveCombinators(true)
             .build();
 
     private OpenApiContract() {

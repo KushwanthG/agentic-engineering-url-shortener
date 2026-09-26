@@ -46,6 +46,22 @@ retried with a new code up to 5 times; if all attempts collide the request fails
 `503 CODE_GENERATION_EXHAUSTED` (retryable) and nothing is stored. The same target URL submitted
 twice creates two links (no de-duplication).
 
+### Custom aliases (capability `custom-alias`, contract 1.1.0)
+
+A consumer may choose the short code with `alias` once the `custom-alias` capability has been
+released by a governed workflow run (scenario SCN-A); until then an `alias` is rejected with
+`422 CAPABILITY_NOT_AVAILABLE`, never ignored.
+
+| Rule | Outcome |
+|---|---|
+| 3–32 characters of letters, digits, hyphen, underscore; case-sensitive | the alias becomes the code; response `customAlias: true` |
+| other characters, or shorter than 3 / longer than 32 | `400 INVALID_ALIAS` |
+| reserved word (`api`, `actuator`, `admin`, `health`, ...; compared ignoring case) | `400 RESERVED_ALIAS` |
+| alias already used by any link (aliases share the namespace of generated codes) | `409 ALIAS_CONFLICT` |
+
+An aliased link resolves like any other link (`GET /spring-sale` → 302). Withdrawing the capability
+stops new aliases only; existing aliases keep resolving.
+
 ### URL safety rules (no DNS resolution)
 
 Rejected with `400` and a specific code:

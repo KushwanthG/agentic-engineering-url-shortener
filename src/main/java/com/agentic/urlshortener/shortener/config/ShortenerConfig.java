@@ -9,6 +9,7 @@ import java.util.Set;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import com.agentic.urlshortener.shortener.domain.AliasPolicy;
 import com.agentic.urlshortener.shortener.domain.SecureRandomShortCodeGenerator;
 import com.agentic.urlshortener.shortener.domain.ShortCodeGenerator;
 import com.agentic.urlshortener.shortener.domain.UrlPolicy;
@@ -26,6 +27,11 @@ public class ShortenerConfig {
             selfHosts.add(baseHost.toLowerCase(Locale.ROOT));
         }
         return new UrlPolicy(properties.maxUrlLength(), selfHosts);
+    }
+
+    @Bean
+    AliasPolicy aliasPolicy(ShortenerProperties properties) {
+        return new AliasPolicy(properties.reservedAliases());
     }
 
     @Bean

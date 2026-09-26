@@ -1,0 +1,159 @@
+# Capability catalog (plan.md §3, ADR-017): the knowledge the deterministic agents use to interpret
+# requirements, decompose them, assess threats, design, verify, document, and release. Baseline
+# capabilities describe the running URL shortener; scenario capabilities are delivered unreleased and
+# made available only by a governed run (ADR-018).
+version: 1.0.0
+capabilities:
+  - id: link-creation
+    name: Link creation
+    baseline: true
+    keywords: [shorten, short link, create link, link creation]
+    components:
+      - { name: LinkController, path: src/main/java/com/agentic/urlshortener/shortener/controller/LinkController.java, change: UNCHANGED, responsibility: links API }
+      - { name: LinkCreationService, path: src/main/java/com/agentic/urlshortener/shortener/service/LinkCreationService.java, change: UNCHANGED, responsibility: validated creation with bounded collision retry }
+  - id: redirect
+    name: Redirect resolution
+    baseline: true
+    keywords: [redirect, resolve, resolution]
+    components:
+      - { name: RedirectService, path: src/main/java/com/agentic/urlshortener/shortener/service/RedirectService.java, change: UNCHANGED, responsibility: public redirect outcomes }
+  - id: expiration
+    name: Link expiration
+    baseline: true
+    keywords: [expiry, expires, expiration]
+    components:
+      - { name: ShortLink, path: src/main/java/com/agentic/urlshortener/shortener/domain/ShortLink.java, change: UNCHANGED, responsibility: expiry rule }
+  - id: analytics
+    name: Click analytics
+    baseline: true
+    keywords: [analytics, click count, stats, statistics]
+    components:
+      - { name: ClickRecorder, path: src/main/java/com/agentic/urlshortener/shortener/service/ClickRecorder.java, change: UNCHANGED, responsibility: exact click counting }
+
+  - id: custom-alias
+    name: Custom aliases
+    baseline: false
+    changeType: NEW_CAPABILITY
+    keywords: [alias, aliases, custom alias, vanity]
+    components:
+      - { name: AliasPolicy, path: src/main/java/com/agentic/urlshortener/shortener/domain/AliasPolicy.java, change: NEW, responsibility: alias syntax (3-32 of letters, digits, hyphen, underscore) and reserved words }
+      - { name: LinkCreationService, path: src/main/java/com/agentic/urlshortener/shortener/service/LinkCreationService.java, change: MODIFIED, responsibility: use the alias as the short code in the shared namespace }
+      - { name: CreateLinkRequest / LinkResponse, path: src/main/java/com/agentic/urlshortener/shortener/dto, change: MODIFIED, responsibility: alias input and customAlias output }
+      - { name: ShortLink, path: src/main/java/com/agentic/urlshortener/shortener/domain/ShortLink.java, change: MODIFIED, responsibility: customAlias flag }
+    api:
+      contractVersion: 1.1.0
+      fields: [alias, customAlias]
+      errorCodes: [INVALID_ALIAS, RESERVED_ALIAS, ALIAS_CONFLICT]
+      changes:
+        - { operation: POST /api/v1/links, change: "optional input 'alias'; error codes INVALID_ALIAS (400), RESERVED_ALIAS (400), ALIAS_CONFLICT (409)", compatibility: BACKWARD_COMPATIBLE }
+        - { operation: "GET /api/v1/links/{code}", change: "response field 'customAlias'", compatibility: BACKWARD_COMPATIBLE }
+    schema:
+      migration: "3"
+      changes:
+        - { migration: V3__custom_alias.sql, change: "short_link.custom_alias BOOLEAN NOT NULL DEFAULT FALSE", compatibility: ADDITIVE }
+      columns: [custom_alias]
+    securityControlChange: false
+    release:
+      strategy: capability release flag, set by the release stage after release approval
+      parameters: {}
+    rollback: "Withdraw the custom-alias flag: new alias requests are rejected with CAPABILITY_NOT_AVAILABLE, links already created with an alias keep resolving (Q4); migration V3 is additive and stays."
+    acceptanceProbes: [CA-P1, CA-P2, CA-P3, CA-P4, CA-P5, CA-P6]
+    securityProbes: [SEC-URL-CATALOG, CA-SEC-RESERVED, CA-SEC-ROUTE]
+    threats:
+      - { id: TH-CA-1, category: SPOOFING, description: "an alias imitates a system route or reserved word (api, actuator, admin)", severity: HIGH, mitigation: "reserved alias list and alias pattern", verifiedBy: [CA-SEC-RESERVED, CA-SEC-ROUTE] }
+      - { id: TH-CA-2, category: TAMPERING, description: "an alias takes over an existing link's code", severity: HIGH, mitigation: "shared unique code namespace; ALIAS_CONFLICT", verifiedBy: [CA-P2] }
+      - { id: TH-URL-1, category: SPOOFING, description: "an aliased link points at a malicious or internal target", severity: HIGH, mitigation: "URL policy applies unchanged to aliased links", verifiedBy: [SEC-URL-CATALOG] }
+      - { id: TH-CA-3, category: INFORMATION_DISCLOSURE, description: "memorable aliases are easier to guess than random codes", severity: LOW, mitigation: "aliases are opt-in; not-found throttling slows enumeration", verifiedBy: [] }
+    docAnchors:
+      - { path: docs/api/links.md, mentions: alias }
+    tasks:
+      - { id: WT-01, title: "Contract 1.1.0: alias input, customAlias output, error codes", kind: CONTRACT, component: openapi.yaml, dependsOn: [], parallelizable: true, criteria: [INVALID_ALIAS, RESERVED_ALIAS, ALIAS_CONFLICT, alias] }
+      - { id: WT-02, title: "Migration V3: short_link.custom_alias", kind: SCHEMA, component: V3__custom_alias.sql, dependsOn: [], parallelizable: true, criteria: [created] }
+      - { id: WT-03, title: "Alias policy: pattern, length, reserved words", kind: DOMAIN, component: AliasPolicy, dependsOn: [], parallelizable: true, criteria: [characters, shorter, reserved] }
+      - { id: WT-04, title: "Creation path uses the alias as the code (shared namespace)", kind: API, component: LinkCreationService, dependsOn: [WT-02, WT-03], parallelizable: false, criteria: [in use, created, resolved] }
+      - { id: WT-05, title: "Acceptance probes CA-P1..CA-P6", kind: TEST, component: CustomAliasProbes, dependsOn: [WT-04], parallelizable: false, criteria: ["*"] }
+      - { id: WT-06, title: "Document the alias in the links API guide", kind: DOCUMENTATION, component: docs/api/links.md, dependsOn: [WT-01], parallelizable: true, criteria: [] }
+      - { id: WT-07, title: "Release plan: set the custom-alias flag; rollback: withdraw it", kind: RELEASE, component: capability_release, dependsOn: [WT-05, WT-06], parallelizable: false, criteria: [] }
+
+  - id: click-limit
+    name: Click-limited links
+    baseline: false
+    changeType: CHANGE_TO_EXISTING
+    keywords: [click limit, limit how many times, maximum of, maximum clicks, one-time, limited-use]
+    components:
+      - { name: ShortLink, path: src/main/java/com/agentic/urlshortener/shortener/domain/ShortLink.java, change: MODIFIED, responsibility: maxClicks value }
+      - { name: RedirectService, path: src/main/java/com/agentic/urlshortener/shortener/service/RedirectService.java, change: MODIFIED, responsibility: exhausted links resolve as expired; fail-closed click recording for limited links }
+      - { name: ClickRecorder, path: src/main/java/com/agentic/urlshortener/shortener/service/ClickRecorder.java, change: MODIFIED, responsibility: conditional atomic increment }
+      - { name: ShortLinkRepository, path: src/main/java/com/agentic/urlshortener/shortener/repository/ShortLinkRepository.java, change: MODIFIED, responsibility: increment only while below the limit }
+      - { name: LinkCreationService, path: src/main/java/com/agentic/urlshortener/shortener/service/LinkCreationService.java, change: MODIFIED, responsibility: validate maxClicks }
+    api:
+      contractVersion: 1.2.0
+      fields: [maxClicks]
+      errorCodes: [INVALID_CLICK_LIMIT]
+      changes:
+        - { operation: POST /api/v1/links, change: "optional input 'maxClicks' (1-1,000,000); error code INVALID_CLICK_LIMIT (400)", compatibility: BACKWARD_COMPATIBLE }
+        - { operation: "GET /{code}", change: "a click-limited link returns 410 once exhausted; 503 when its click cannot be recorded", compatibility: BEHAVIOR_ONLY }
+    schema:
+      migration: "4"
+      changes:
+        - { migration: V4__click_limit.sql, change: "short_link.max_clicks BIGINT NULL, CHECK 1..1000000", compatibility: ADDITIVE }
+      columns: [max_clicks]
+    securityControlChange: false
+    release:
+      strategy: capability release flag, set by the release stage after release approval
+      parameters: {}
+    rollback: "Withdraw the click-limit flag: new limits are rejected; stored limits stay enforced (Q4); V4 is additive (nullable column) and stays."
+    acceptanceProbes: [CL-P1, CL-P2, CL-P3, CL-P4, CL-P5, CL-P6]
+    securityProbes: [SEC-URL-CATALOG, CL-SEC-BOUNDS]
+    regressionProbes: [R-P1, R-P2, R-P3, R-P4]
+    impactSeeds: [RedirectService, ClickRecorder, ShortLink, LinkCreationService, ShortLinkRepository]
+    impactedRequirements: [FR-ANL-04, FR-RED-04, FR-LNK-11]
+    threats:
+      - { id: TH-CL-1, category: TAMPERING, description: "concurrent resolutions exceed the limit (lost updates)", severity: HIGH, mitigation: "conditional atomic SQL increment", verifiedBy: [CL-P3] }
+      - { id: TH-CL-2, category: DENIAL_OF_SERVICE, description: "a huge or negative limit abuses storage or logic", severity: MEDIUM, mitigation: "range 1..1,000,000 enforced by API and CHECK constraint", verifiedBy: [CL-SEC-BOUNDS] }
+      - { id: TH-URL-1, category: SPOOFING, description: "a limited link points at a malicious or internal target", severity: HIGH, mitigation: "URL policy unchanged", verifiedBy: [SEC-URL-CATALOG] }
+    docAnchors:
+      - { path: docs/api/links.md, mentions: maxClicks }
+    tasks:
+      - { id: WT-01, title: "Contract 1.2.0: maxClicks input and output, INVALID_CLICK_LIMIT", kind: CONTRACT, component: openapi.yaml, dependsOn: [], parallelizable: true, criteria: [INVALID_CLICK_LIMIT, reports its click limit] }
+      - { id: WT-02, title: "Migration V4: short_link.max_clicks with range check", kind: SCHEMA, component: V4__click_limit.sql, dependsOn: [], parallelizable: true, criteria: [maximum of 2 clicks] }
+      - { id: WT-03, title: "Conditional atomic increment and exhausted-as-expired", kind: DOMAIN, component: ShortLinkRepository, dependsOn: [WT-02], parallelizable: false, criteria: [resolved 3 times, concurrently] }
+      - { id: WT-04, title: "Fail-closed click recording for limited links", kind: API, component: RedirectService, dependsOn: [WT-03], parallelizable: false, criteria: [cannot be recorded] }
+      - { id: WT-05, title: "Acceptance and regression probes", kind: TEST, component: ClickLimitProbes, dependsOn: [WT-04], parallelizable: false, criteria: ["*"] }
+      - { id: WT-06, title: "Document click limits in the links API guide", kind: DOCUMENTATION, component: docs/api/links.md, dependsOn: [WT-01], parallelizable: true, criteria: [] }
+      - { id: WT-07, title: "Release plan: set the click-limit flag; rollback: withdraw it", kind: RELEASE, component: capability_release, dependsOn: [WT-05, WT-06], parallelizable: false, criteria: [] }
+
+  - id: default-expiry
+    name: Default link expiry
+    baseline: false
+    changeType: CHANGE_TO_EXISTING
+    keywords: [links should expire, default expiry, expire after, expiry after]
+    components:
+      - { name: LinkCreationService, path: src/main/java/com/agentic/urlshortener/shortener/service/LinkCreationService.java, change: MODIFIED, responsibility: assign the released default expiry when none is given }
+      - { name: CapabilityService, path: src/main/java/com/agentic/urlshortener/shortener/service/CapabilityService.java, change: UNCHANGED, responsibility: release parameters (defaultExpiryDays) }
+    api:
+      contractVersion: 1.2.0
+      fields: []
+      errorCodes: []
+      changes:
+        - { operation: POST /api/v1/links, change: "links created without expiresAt receive the released default expiry", compatibility: BEHAVIOR_ONLY }
+    securityControlChange: false
+    release:
+      strategy: capability release flag with the human-decided default expiry
+      parameters: { defaultExpiryDays: 30 }
+    rollback: "Withdraw the default-expiry flag: new links are created without a default expiry; expiries already assigned remain (Q4)."
+    acceptanceProbes: [DE-P1, DE-P2, DE-P3]
+    securityProbes: [SEC-URL-CATALOG]
+    regressionProbes: [R-P1, R-P2, R-P3]
+    impactSeeds: [LinkCreationService, ShortLink]
+    impactedRequirements: [FR-LNK-12, FR-RED-04]
+    threats:
+      - { id: TH-DE-1, category: DENIAL_OF_SERVICE, description: "a wrong default expires consumers' links unexpectedly", severity: MEDIUM, mitigation: "human-decided parameter; existing links unchanged", verifiedBy: [DE-P3] }
+      - { id: TH-URL-1, category: SPOOFING, description: "links point at a malicious or internal target", severity: HIGH, mitigation: "URL policy unchanged", verifiedBy: [SEC-URL-CATALOG] }
+    docAnchors:
+      - { path: docs/api/links.md, mentions: default expiry }
+    tasks:
+      - { id: WT-01, title: "Default expiry on creation from the released parameter", kind: DOMAIN, component: LinkCreationService, dependsOn: [], parallelizable: false, criteria: [default expiry, without an explicit expiry] }
+      - { id: WT-02, title: "Acceptance and regression probes", kind: TEST, component: DefaultExpiryProbes, dependsOn: [WT-01], parallelizable: false, criteria: ["*"] }
+      - { id: WT-03, title: "Document the default expiry in the links API guide", kind: DOCUMENTATION, component: docs/api/links.md, dependsOn: [], parallelizable: true, criteria: [] }
+      - { id: WT-04, title: "Release plan: set the default-expiry flag with the decided days", kind: RELEASE, component: capability_release, dependsOn: [WT-02, WT-03], parallelizable: false, criteria: [] }

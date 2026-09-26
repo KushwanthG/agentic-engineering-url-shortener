@@ -49,6 +49,9 @@ public class ShortLink {
     @Column(name = "synthetic_run_id")
     private UUID syntheticRunId;
 
+    @Column(name = "custom_alias", nullable = false)
+    private boolean customAlias;
+
     protected ShortLink() {
     }
 
@@ -69,7 +72,17 @@ public class ShortLink {
 
     /** A link created by an orchestration run for verification only; removed by run cleanup. */
     public static ShortLink synthetic(String code, String targetUrl, Instant createdAt, UUID runId) {
-        return new ShortLink(code, targetUrl, "run:" + runId.toString().substring(0, 8), createdAt, null, true, runId);
+        return synthetic(code, targetUrl, createdAt, null, runId);
+    }
+
+    public static ShortLink synthetic(String code, String targetUrl, Instant createdAt, Instant expiresAt, UUID runId) {
+        return new ShortLink(code, targetUrl, "run:" + runId.toString().substring(0, 8), createdAt, expiresAt, true, runId);
+    }
+
+    /** Marks a new link whose code was chosen by the consumer (custom-alias capability). */
+    public ShortLink asCustomAlias() {
+        this.customAlias = true;
+        return this;
     }
 
     /** Expired at and after the expiry instant ({@code expires_at == now} is expired, FR-RED-04). */
@@ -119,5 +132,9 @@ public class ShortLink {
 
     public UUID getSyntheticRunId() {
         return syntheticRunId;
+    }
+
+    public boolean isCustomAlias() {
+        return customAlias;
     }
 }

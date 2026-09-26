@@ -1,6 +1,9 @@
 # Build output
 target/
 *.class
+*.jar
+*.tmp
+*.swp
 
 # Logs and local runtime data (file-based H2 database, demo exports)
 *.log

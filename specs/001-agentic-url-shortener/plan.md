@@ -53,8 +53,8 @@ measurements
 **Constraints**: offline (no external services at runtime), no real secrets, single instance
 (ASM-01), bounded agent concurrency, 2–3 day timebox
 
-**Scale/Scope**: design point of 10 million links (NFR-SCA-02); tens of concurrent runs; 89
-functional requirements, 26 NFRs, 3 scenarios, 7 drills
+**Scale/Scope**: design point of 10 million links (NFR-SCA-02); tens of concurrent runs; 91
+functional requirements, 26 NFRs, 9 success criteria, 3 scenarios, 7 drills
 
 ## Constitution Check (pre-design)
 
@@ -590,6 +590,14 @@ runs, and events whose stage generation was invalidated by replanning before rec
 | T12 | Fault-injection or preview mode abused in production | Elevation of privilege | disabled by default; preview is in-process only (no HTTP path) | configuration and security tests |
 | T13 | SQL injection | Tampering | parameterized JPA/JDBC queries only | code review, tests with hostile input |
 
+**Release-readiness security checks (repository level, constitution V)**: before the release
+decision, (1) an executable **repository secret scan** checks every tracked text file for
+private keys, cloud credentials, bearer tokens, and `password=` values, allow-listing only the
+labeled demo tokens and their hashes; (2) a **dependency vulnerability scan** runs OSV-Scanner (a
+pinned release) against the CycloneDX SBOM and records findings with dispositions. If the scanner
+cannot run, the gap is recorded as a release limitation that needs the candidate's explicit
+exception at G6. Results are stored in `docs/assessment/security-scans.md`.
+
 **Authentication assumptions**: bearer tokens stand in for an enterprise identity provider
 (ASM-02). Tokens are compared by SHA-256 hash in constant time. Missing or invalid credentials
 return `401` with no detail about which part failed. **Rate limiting**: §2. **Secrets management**:
@@ -668,6 +676,8 @@ changelog versioning, and `/speckit-analyze` after any upstream edit.
 | Replanning | invalidation, reuse by fingerprint, approval invalidation, change control, late ambiguity | scripted agents | `orchestration.planning` | FR-RPL-* |
 | Concurrency | 200 concurrent redirects, concurrent idempotent creates, concurrent decisions | executor + latch | several | FR-ANL-05, FR-LNK-09 |
 | Security | URL catalog, authN/authZ matrix, secret-in-log check, fault injection disabled | MockMvc | `security` | NFR-SEC-* |
+| Repository security scans | secret patterns in tracked files; SBOM vulnerability scan (OSV-Scanner) | JUnit file scan; OSV-Scanner CLI | `security`; `docs/assessment/security-scans.md` | NFR-SEC-03, NFR-SEC-05, constitution V |
+| Governance invariants | across every end-to-end run: no stage downstream of an undecided gate started; no release after an unexcepted mandatory `FAIL`; no gate succeeded without a valid decision | audit-trail analysis | `e2e` | SC-004, FR-GOV-02/03, FR-POL-03 |
 | Architecture | plane boundaries, agent restrictions, layering | ArchUnit | `architecture` | NFR-MNT-01, NFR-AUT-01 |
 | Agents | each agent's output against its JSON Schema | JUnit + schema validation | `orchestration.agents` | FR-ORC-13..16 |
 | End-to-end | SCN-A/B/C and RDR-01..07 over HTTP, with evidence export | `@SpringBootTest(RANDOM_PORT)` | `e2e` | SC-002 |
@@ -776,10 +786,13 @@ per task) → **Test** (JUnit `@Tag("FR-...")`, `@Tag("SCN-A")`) → **Validatio
 `target/evidence/`) → **Documentation** (docs pages citing ids) → **Evidence**
 (`docs/scenarios/`, `docs/assessment/`).
 
-`TraceabilityMatrixTest` parses `spec.md` for every FR/NFR/SCN identifier, scans the test sources
-for `@Tag` values, writes `target/traceability/requirements-to-tests.md`, and **fails** if any FR
-or SCN has no test. The committed matrix `docs/traceability/requirements-to-tests.md` is refreshed
-from this output at convergence.
+`TraceabilityMatrixTest` parses `spec.md` for every FR/NFR/SCN/RDR identifier, scans the test
+sources for `@Tag` values, writes `target/traceability/requirements-to-tests.md`, and **fails** on
+an orphan requirement (an FR or SCN without a test), an orphan test (a test class without any
+requirement, scenario, or drill tag), or an orphan task (a task in `tasks.md` without a `Req`
+field). Orphan implementation is prevented by task scope: every task names the paths it creates,
+and the convergence review compares changed paths with task paths. The committed matrix
+`docs/traceability/requirements-to-tests.md` is refreshed from this output at convergence.
 
 ## 14. Delivery Sequence and Scope Control
 
@@ -801,6 +814,22 @@ from this output at convergence.
 
 **Critical path**: M0 → M1 → M2 → M3 → M4 → M5 → M6 → M7 → M8 → M9. With more people, M2 and
 M3–M5 could run in parallel. This execution has a single implementer.
+
+**Execution order in `tasks.md`**: SpecKit organizes tasks by user story, so the milestones above
+(ordered by technical layer) are delivered in story order. The milestone content maps to task
+phases as follows:
+
+| Task phase | Milestone content delivered |
+|------------|-----------------------------|
+| Phase 1–2 Setup, Foundational | M0, M1 |
+| Phase 3 US1 | M2, then CP1 |
+| Phase 4 US2 (SCN-A) | M3 (state model, engine), the policy-evaluation core of M6, the agents and custom-alias capability of M7, SCN-A of M8 |
+| Phase 5 US3 | M4 |
+| Phase 6 US4 | M5, the exception and readiness parts of M6, the drills of M8, then CP2 |
+| Phase 7 US5 (SCN-B) | the brownfield gate and click-limit capability of M7, SCN-B of M8 |
+| Phase 8 US6 (SCN-C) | the replanning part of M6, the default-expiry capability of M7, SCN-C of M8, then CP3 |
+| Phase 9 US7 | the evidence, MTTR, and traceability parts of M8 |
+| Phase 10 Polish | M9 |
 
 **Stop conditions**: a failing mandatory test that cannot be fixed within the task group; any
 needed change to an approved contract, ADR, state model, or security control (escalate to the

@@ -59,6 +59,11 @@ repository's development process and stay unavailable to consumers until a run r
 | Autonomy budget | Per-run limits on automated effort (stage attempts, processing time) |
 | Synthetic data | Data created by automated checks; always labeled and cleaned up |
 
+**Outcome spelling**: prose in this specification and the constitution writes outcomes with
+spaces or hyphens (`EXCEPTION-REQUESTED`, `NOT-APPLICABLE`, "READY WITH ACCEPTED LIMITATIONS"); the
+API contract and the data model use the equivalent enum constants (`EXCEPTION_REQUESTED`,
+`NOT_APPLICABLE`, `READY_WITH_ACCEPTED_LIMITATIONS`). They denote the same values.
+
 ## Clarifications
 
 ### Session 2026-09-26
@@ -221,8 +226,9 @@ pause/resume, and operator safe-stop on runs with simulated faults.
    release, **Then** the approval is refused. *(FR-RDY-02)*
 3. *(negative)* **Given** a principal without the release-owner role, **When** they attempt to
    approve a release, **Then** the attempt is refused. *(FR-RDY-04)*
-4. **Given** post-release verification fails, **Then** the capability is withdrawn, the run
-   safe-stops, and the compensation is recorded. *(FR-RDY-03, FR-REL-04)*
+4. **Given** post-release verification fails, **Then** the release state is rolled back (the
+   capability is withdrawn), the exposure window is recorded as a compensation, and the run
+   safe-stops. *(FR-RDY-03, FR-REL-04, FR-REL-05)*
 5. **Given** an active run, **When** the release owner pauses it, **Then** no new stage starts,
    in-flight stages finish, and after resumption the run continues where it paused. *(FR-REL-07)*
 6. **Given** an active run, **When** the release owner requests safe-stop, **Then** the run halts
@@ -392,9 +398,9 @@ architecture approval → implementation → testing ‖ security verification, 
 running in parallel from design approval → validation (synchronization) → compliance evaluation →
 release approval → release → final summary.
 
-**Failure paths exercised**: a transient testing failure recovers through bounded retry (simulated
-fault, labeled). If material ambiguity emerges later, only the affected path is suspended
-(FR-RPL-06).
+**Failure paths exercised**: a transient testing failure recovers through bounded retry (drill
+RDR-01 runs the SCN-A input with a simulated, labeled fault). If material ambiguity emerges later,
+only the affected path is suspended (FR-RPL-06).
 
 **Expected terminal outcome**: `COMPLETED`, readiness `READY`, custom-alias capability released.
 
@@ -613,9 +619,10 @@ constitution; `[Derived · parent]` = engineering derivation that requires appro
   execution; an invalid plan MUST NOT execute.
 - **FR-ORC-03** [Confirmed · A§4.4, G§7]: The stage catalog MUST cover requirement ingestion,
   requirement analysis (normalization, ambiguity detection, quality checks), clarification,
-  decomposition, impact analysis, threat assessment, design, architecture approval,
-  implementation, testing, regression testing, security verification, documentation, validation,
-  compliance evaluation, release approval, release, and final summary.
+  decomposition, impact analysis, threat assessment, design, architecture approval, change
+  approval (inserted only for material change requests after an approval), implementation,
+  testing, regression testing, security verification, documentation, validation, compliance
+  evaluation, release approval, release, and final summary.
 - **FR-ORC-04** [Confirmed · A§4.4]: A stage MUST start as soon as all of its dependencies are
   satisfied, and independent stages MUST be able to execute concurrently.
 - **FR-ORC-05** [Confirmed · A§4.4]: A synchronization stage MUST start only after all of its
@@ -724,8 +731,9 @@ constitution; `[Derived · parent]` = engineering derivation that requires appro
 - **FR-REL-10** [Derived · C:VIII]: If compensation fails after bounded retries (PVT-16), the run
   MUST safe-stop with a manual-intervention flag.
 - **FR-REL-11** [Derived · C:V, C:X]: For demonstrations and tests, a run MAY carry a fault-injection
-  plan only when fault injection is explicitly enabled; injected faults MUST be labeled as simulated
-  in all evidence, and fault injection MUST be disabled by default.
+  plan, and a per-run gate deadline override for deadline drills, only when fault injection is
+  explicitly enabled; injected faults MUST be labeled as simulated in all evidence, and fault
+  injection MUST be disabled by default.
 
 ### Functional Requirements — Dynamic replanning (RPL)
 
@@ -790,9 +798,9 @@ constitution; `[Derived · parent]` = engineering derivation that requires appro
   policy outcomes, exceptions, degraded stages, and open risks.
 - **FR-RDY-02** [Confirmed · C:VI]: Release approval MUST be refused while readiness is `NOT READY`;
   readiness MUST be re-evaluated at decision time.
-- **FR-RDY-03** [Derived · A§4.4]: The release stage MUST make the capability available, verify it
-  after release, and on verification failure compensate by withdrawing the capability and then
-  safe-stop.
+- **FR-RDY-03** [Derived · A§4.4]: The release stage MUST make the capability available and verify it
+  after release. On verification failure it MUST roll back the release state (withdraw the
+  capability), record the exposure window as a compensation, and then safe-stop.
 - **FR-RDY-04** [Confirmed · C:III]: Only a principal holding the release-owner role MUST be able to
   decide a release gate.
 
@@ -912,6 +920,8 @@ Each assumption is proposed and requires approval at Gate G2 or G3. Owner: human
   cost of one extra write per redirect (AMB-06, Clarifications Q5).
 - **ASM-11**: Clarification questions are answered by a human holding the approver role; the
   requester may be consulted but does not decide (AMB-11).
+- **ASM-12**: Click events are retained for the lifetime of the prototype database; a production
+  retention and aggregation policy is deferred (the daily analytics window is 30 days, PVT-10).
 
 ## Constraints
 

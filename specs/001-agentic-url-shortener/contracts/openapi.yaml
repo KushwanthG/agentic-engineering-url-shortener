@@ -409,7 +409,9 @@ paths:
       operationId: decideGate
       summary: Approve or reject a human approval gate
       description: |
-        `ARCHITECTURE_APPROVAL` requires `APPROVER`; `RELEASE_APPROVAL` requires `RELEASE_OWNER`.
+        Decides only `ARCHITECTURE_APPROVAL` (role `APPROVER`) and `RELEASE_APPROVAL` (role
+        `RELEASE_OWNER`). Clarifications, change approvals, and policy exceptions have dedicated
+        endpoints; any other `stageKey` returns `409 ILLEGAL_STATE`.
         The requester of the run cannot decide these gates (`403 SEPARATION_OF_DUTIES`). Release
         approval is refused while readiness is `NOT_READY` (`409 RELEASE_NOT_READY`). The approval
         is bound to the fingerprints of the review artifacts listed in the pending action.

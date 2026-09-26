@@ -30,6 +30,15 @@ and, during the session:
 
 > "keep all sdd related files and project in the current folder only..."
 
+and, as a technology directive:
+
+> "I have installed jdk 21... please use java 21 version in the project"
+
+These are the candidate's own decisions and are treated as approved inputs: **Spring Boot** as
+the framework (first instruction) and **Java 21** as the language level (third instruction). The
+specific Spring Boot version and every other technology choice remain assistant proposals, pending
+G4.
+
 The candidate was not available to answer gate questions during the session. Under the
 constitution's **Delegated Provisional Progression** clause, stages proceeded provisionally. This
 instruction delegates *execution*; it is **not** an approval of any specific artifact, decision, or
@@ -41,7 +50,7 @@ decision, and release readiness is blocked until then.
 | Gate | Decision required | Status | Decided by | Date |
 |------|-------------------|--------|------------|------|
 | G1 | Constitution ratified | PENDING RATIFICATION | — | — |
-| G2 | Requirements approved | NOT YET REACHED | — | — |
+| G2 | Requirements approved | PENDING RATIFICATION | — | — |
 | G3 | Clarifications decided | NOT YET REACHED | — | — |
 | G4 | Architecture and ADRs accepted | NOT YET REACHED | — | — |
 | G5 | Implementation may start | NOT YET REACHED | — | — |
@@ -90,3 +99,30 @@ decision, and release readiness is blocked until then.
 - **Templates**: `.specify/templates/*` are read at runtime and were not modified; the plan
   template's "Constitution Check" gate is satisfied by the Governance rule on compliance assessment.
 - **Deferred items**: `TODO(RATIFICATION_DATE)`, set when the candidate ratifies G1.
+
+---
+
+## G2 — Requirements (feature specification)
+
+- **Artifact**: [`specs/001-agentic-url-shortener/spec.md`](../../specs/001-agentic-url-shortener/spec.md)
+  and its quality checklist [`checklists/requirements.md`](../../specs/001-agentic-url-shortener/checklists/requirements.md)
+- **Assistant recommendation**: approve, after deciding the three open clarification markers at G3.
+  Pay particular attention to every requirement tagged `[Derived · …]`: they are engineering
+  inferences, not assignment text. Also review the three scenario payloads (custom alias, click
+  limit, default expiry) and the Proposed Validation Targets (PVT-01..PVT-25), which are
+  assumptions, not client requirements.
+- **Decision**: _pending_ · **Decided by**: _pending_ · **Date**: _pending_ · **Notes**: _pending_
+
+### Gate 2 review checklist (guide: reject a specification that ...)
+
+| Rejection criterion | Where the specification addresses it |
+|---------------------|--------------------------------------|
+| chooses technologies prematurely | No language, framework, database, or platform named; CON-03 |
+| silently resolves ambiguity | Ambiguity Register AMB-01..AMB-09; 3 `[NEEDS CLARIFICATION]` markers; assumptions ASM-01..ASM-10 labeled as proposals |
+| lacks negative behavior | `(negative)` acceptance scenarios in US1-US6; Edge Cases section |
+| omits a required scenario | SCN-A, SCN-B, SCN-C with fixed inputs and evidence lists |
+| presents orchestration as a linear chain | FR-ORC-02/04/05/06, parallel `‖` paths in every scenario, FR-RPL-* |
+| lacks human approval | FR-GOV-01..09, FR-RDY-02/04, US3 |
+| lacks recovery or safe-stop | FR-REL-01..11, drills RDR-01..07 |
+| cannot be tested | every FR is a MUST statement with an observable outcome; NFR verification column |
+| cannot be traced | stable identifiers; provenance tags `[Confirmed · …]` / `[Derived · …]`; Traceability Notes |

@@ -1,0 +1,11 @@
+# SpecKit version record (guide section 3.3)
+# Installed with: uv tool install specify-cli --from git+https://github.com/github/spec-kit.git@v1.0.12
+# Resolved commit: e77daa9021d20db26b878f7dfa5640fe5a42d04e
+# Initialized with: specify init --here --force --non-interactive --integration claude --script ps --ignore-agent-tools
+# Output of 'specify version' captured on 2026-09-26:
+
+CLI Version    1.0.12
+Python         3.14.7
+Platform       Windows
+Architecture   AMD64
+OS Version     10.0.26200

@@ -1,0 +1,24 @@
+# Build output
+target/
+*.class
+
+# Logs and local runtime data (file-based H2 database, demo exports)
+*.log
+logs/
+data/
+
+# IDE and editor files
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+.factorypath
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Claude Code machine-local settings (may hold credentials); skills under .claude/skills are shared
+.claude/settings.local.json

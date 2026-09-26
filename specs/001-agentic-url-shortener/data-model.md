@@ -4,8 +4,14 @@
 
 The persistence schema is owned by Flyway migrations under `src/main/resources/db/migration/`.
 Hibernate runs with `ddl-auto=validate`, so it can never change the schema. All timestamps are
-UTC (`TIMESTAMP WITH TIME ZONE`). Identifiers: `BIGINT` identity for high-volume application rows,
-`UUID` for control-plane rows that appear in APIs and audit evidence.
+UTC (`TIMESTAMP WITH TIME ZONE`, microsecond precision). Identifiers: `BIGINT` identity for
+high-volume application rows, `UUID` for control-plane rows that appear in APIs and audit evidence.
+
+**Type conventions (implementation note, task T007)**: hashes and fingerprints are `VARCHAR(64)`
+(lower-case hex); large text columns noted as `CLOB` below are implemented as large `VARCHAR`
+(up to 1,000,000 characters), which keeps Hibernate schema validation and plain string mapping
+simple on both H2 and PostgreSQL. Column names avoid SQL reserved words (for example the plan
+version's trigger is stored as `trigger_type`).
 
 ## Migration plan (versioned persistence schema)
 
@@ -134,7 +140,7 @@ CHAR(64) · `created_by` · `created_at` · `decision_id` UUID NULL (the decisio
 
 `id` UUID · `run_id` FK · `version` INT (unique per run) · `graph` CLOB (JSON: stages with type,
 dependencies, condition, gate flag) · `diff` CLOB NULL (added, removed, activated, invalidated
-stages) · `trigger` (`INITIAL`, `ANALYSIS_REFINEMENT`, `CLARIFICATION`, `CHANGE_REQUEST`,
+stages) · `trigger_type` (`INITIAL`, `ANALYSIS_REFINEMENT`, `CLARIFICATION`, `CHANGE_REQUEST`,
 `CHANGE_DECISION`, `LATE_AMBIGUITY`) · `reason` · `created_by` · `created_at`.
 
 ### StageNode (`stage_node`)
@@ -161,7 +167,9 @@ stages) · `trigger` (`INITIAL`, `ANALYSIS_REFINEMENT`, `CLARIFICATION`, `CHANGE
 ### StageAttempt (`stage_attempt`)
 
 `id` UUID · `run_id` · `stage_key` · `generation` · `attempt_no` · `agent_id` (e.g.
-`requirement-analyst@1.0`) · `fallback` BOOLEAN · `simulated_fault` VARCHAR NULL · `started_at` ·
+`requirement-analyst@1.0`) · `fallback` BOOLEAN · `simulated_fault` VARCHAR NULL ·
+`scheduling_cycle` BIGINT (the coordinator cycle that dispatched the attempt; parallel stages share
+it — review RC-2) · `started_at` ·
 `finished_at` NULL · `outcome` (`SUCCEEDED`, `FAILED_TRANSIENT`, `FAILED_PERMANENT`, `TIMED_OUT`,
 `INTERRUPTED`, `DISCARDED`, `NEEDS_CLARIFICATION`, `POLICY_BLOCKED`, `REUSED`) · `failure_class` ·
 `error` · `input_fingerprint`. The timeline API and the parallelism evidence are built from these
@@ -233,9 +241,16 @@ unapproved (FR-POL-04).
 `CAPABILITY_CHANGED`, `RUN_TERMINATED`) · `target` · `from_state` · `to_state` · `result` ·
 `reason` · `details` CLOB · `prev_hash` CHAR(64) · `hash` CHAR(64).
 
-`hash = SHA-256(prev_hash + "|" + chain_id + "|" + seq + "|" + occurred_at + "|" + actor_type + "|" +
-actor_id + "|" + action + "|" + target + "|" + from_state + "|" + to_state + "|" + result + "|" +
-reason + "|" + details)`; the genesis `prev_hash` is 64 zeros. Rows are insert-only.
+`hash = SHA-256(canonical JSON of {prevHash, chainId, seq, runId, occurredAt, actorType, actorId,
+action, target, fromState, toState, result, reason, details})`; canonical JSON (sorted keys, no
+whitespace) makes the encoding unambiguous. The genesis `prev_hash` is 64 zeros. Rows are
+insert-only.
+
+### AuditChainHead (`audit_chain_head`)
+
+`chain_id` VARCHAR(64) PK · `last_seq` BIGINT · `last_hash` VARCHAR(64). Appends lock the head row
+(`SELECT … FOR UPDATE`) so concurrent appends to one chain serialize; verification compares the
+head with the last event, which detects truncation of the chain's tail (task T012).
 
 ### FailureEvent (`failure_event`)
 

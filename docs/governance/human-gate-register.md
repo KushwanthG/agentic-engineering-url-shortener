@@ -282,4 +282,5 @@ and decides whether redirects may be cached.
 |------|-----------|--------|
 | Review of the brownfield impact analysis before the click-limit code (task T086) | tasks.md | pending — added when T086 runs |
 | Change-control approval of contract versions 1.1.0 and 1.2.0 (task T112) | tasks.md | pending |
+| Change-control review of implementation-time refinements: generic error codes `RESOURCE_NOT_FOUND`, `METHOD_NOT_ALLOWED`, `UNSUPPORTED_MEDIA_TYPE` (T009); persistence schema types, `audit_chain_head`, `stage_attempt.scheduling_cycle`, `plan_version.trigger_type` (T007/T012) | Phase 2 checkpoint | pending (bundled into T112) |
 | Exception for any accepted dependency-scan finding (task T128) | tasks.md | pending if applicable |

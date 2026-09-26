@@ -54,3 +54,32 @@ G1–G5 remain PENDING RATIFICATION.
 
 **Pre-commit review**: change intent is build baseline only; no application code, API, schema, or
 state-model changes; no unrelated files; single coherent commit.
+
+---
+
+## Checkpoint: Phase 2 — Foundational (T005–T016)
+
+| # | Item | Record |
+|---|------|--------|
+| 1 | Completed tasks | T005–T016 |
+| 2 | Requirements addressed | FR-ORC-08, NFR-CHG-01/02, FR-LNK-05 (constraint), FR-ORC-10, FR-GOV-05, FR-RPL-01 (fingerprints), FR-OPS-01, FR-OPS-02 (fail-fast config), FR-OPS-03, FR-OPS-04, FR-AUD-01, FR-AUD-02, FR-AUD-05, NFR-AUD-02, SC-006, FR-LNK-13 (routes), NFR-SEC-02/03, FR-GOV-03 (roles), NFR-SCA-01 (stateless), NFR-MNT-01, CON-02 |
+| 3 | ADRs followed | ADR-001 (package boundaries), ADR-003 (H2 file, Flyway, validate), ADR-006 (persistence), ADR-012 (hash chain), ADR-013 (test stack, contract harness), ADR-014 (profiles), ADR-015 (hashed bearer tokens) |
+| 4 | Files created or changed | `src/main/java/com/agentic/sdlc/{AgenticSdlcApplication, platform/{json,time,web,security}/*, orchestration/{model/ActorType, audit/*}}`, `src/main/resources/{application*.yml, db/migration/V1, V2}`, tests under `src/test/java/com/agentic/sdlc/{persistence, platform, orchestration/audit, architecture, contract, support}` and `WalkingSkeletonIT`, `src/test/resources/application-test.yml`, `CLAUDE.md`, `.gitattributes`, `data-model.md`, `contracts/openapi.yaml`, `contracts/CHANGELOG.md` |
+| 5 | Tests written before implementation | all Phase 2 tests except `ArchitectureTest` (verification) — red runs recorded in `tdd-evidence.md` |
+| 6 | Expected initial failures | missing tables; stub behavior (see evidence log) |
+| 7 | Validation commands executed | `mvnw test -Dtest=MigrationTest` (red, then green); `mvnw test` (Phase 2 red, then green); `mvnw verify` |
+| 8 | Actual outcomes | `mvnw verify`: 54 tests, 0 failures, BUILD SUCCESS |
+| 9 | Documentation updated | `data-model.md` (type conventions, `audit_chain_head`, `scheduling_cycle`, `trigger_type`, canonical-JSON audit hash), `CLAUDE.md`, contract code list, changelog |
+| 10 | Traceability updated | tests tagged with requirement ids; tasks marked |
+| 11 | Deviations from plan | (a) persistence schema refinements listed in row 9 (implementation details of FR-AUD-02 and RC-2; recorded for change-control review in T112); (b) three generic error codes added to the contract baseline (`RESOURCE_NOT_FOUND`, `METHOD_NOT_ALLOWED`, `UNSUPPORTED_MEDIA_TYPE`), additive, recorded for T112; (c) `ScriptedAgent` moved from T015 to T040 (task dependency error: it implements the SPI created in T039); (d) security test positive metrics check uses `/actuator/metrics` because Spring Boot disables the Prometheus registry in tests |
+| 12 | New risks | Spring Boot disables metrics export in tests, so the Prometheus endpoint itself is only exercised when the application runs (quickstart validation T120 covers it) |
+| 13 | New assumptions | H2 `LOCK_TIMEOUT=10000` (10 s) for pessimistic audit locks |
+| 14 | Remaining failures | none |
+| 15 | Commit boundary | Phase 2 |
+| 16 | Commit message | `chore: establish project quality and test baseline` |
+| 17 | Next task group | Phase 3 US1 — URL shortener core (T017–T033) |
+| 18 | Human approval required | the contract and schema refinements in row 11 need the candidate's change-control review (added to the gate register pending items) |
+
+**Pre-commit review**: coherent foundation change; no unrelated files; API contract change limited to
+additive generic error codes (documented); no weakening of security (deny-by-default, hashed tokens);
+all tests green.

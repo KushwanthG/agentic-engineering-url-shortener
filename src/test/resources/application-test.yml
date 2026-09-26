@@ -1,0 +1,42 @@
+# Test profile: isolated in-memory H2 per application context, the demo principals (plus one
+# dual-role principal used to prove separation of duties), and fault injection enabled so the
+# reliability tests can inject labeled, simulated faults.
+spring:
+  datasource:
+    url: jdbc:h2:mem:test-${random.uuid};MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=10000
+
+logging:
+  level:
+    root: WARN
+    com.agentic.sdlc: INFO
+
+app:
+  security:
+    principals:
+      - id: demo-consumer
+        display-name: Demo API consumer (non-production)
+        token-sha256: 589536a607014d539636e078032b0bd279d4f741b4a2f4c02a0215c59393e6d5
+        roles: [API_CONSUMER]
+      - id: alice
+        display-name: Alice, requester (non-production)
+        token-sha256: e613ec83db425fcd80f9bc0ea7c012be6d632cb8e85437f1bb00f6eb235a650a
+        roles: [REQUESTER]
+      - id: bob
+        display-name: Bob, approver (non-production)
+        token-sha256: 13398dbc5ccc9670af6606f261884ed54db3b3a773eae74d7e140a6b6e4abc3c
+        roles: [APPROVER]
+      - id: carol
+        display-name: Carol, release owner (non-production)
+        token-sha256: 115e2fb2810b512117077d57dd29a6799f40a3f7ca7dacdd201f91d36d4af2de
+        roles: [RELEASE_OWNER]
+      - id: rita
+        display-name: Rita, auditor (non-production)
+        token-sha256: d0ad8bb68835a23576c95ef7ddd7c1ffaec451daaf8de46902e7e82b1786886c
+        roles: [AUDITOR]
+      - id: dave
+        display-name: Dave, requester who also holds approver and release-owner roles (test only)
+        token-sha256: 2eb265314467fb0204f4672068f980fb5f8a4405c014ddbbe240874dac39db02
+        roles: [REQUESTER, APPROVER, RELEASE_OWNER]
+  orchestration:
+    fault-injection:
+      enabled: true

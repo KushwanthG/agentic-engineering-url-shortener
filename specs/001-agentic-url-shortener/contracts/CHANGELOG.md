@@ -35,7 +35,7 @@ orchestration produces; `src/main/resources/db/migration/` holds the persistence
 
 | Version | Date | Change | Classification | Introduced by |
 |---------|------|--------|----------------|---------------|
-| 1.0.0 | 2026-09-26 | Baseline: links, redirect, stats; workflows, governance, operations, evidence | — | Feature 001 baseline (US1–US4, US7) |
+| 1.0.0 | 2026-09-26 | Baseline: links, redirect, stats; workflows, governance, operations, evidence. Amended before first release during task T009 with the generic codes `RESOURCE_NOT_FOUND`, `METHOD_NOT_ALLOWED`, `UNSUPPORTED_MEDIA_TYPE` for framework-level errors (additive; listed for change-control review in T112) | — | Feature 001 baseline (US1–US4, US7) |
 | 1.1.0 | 2026-09-26 | `CreateLinkRequest.alias`, `LinkResponse.customAlias`; codes `INVALID_ALIAS`, `RESERVED_ALIAS`, `ALIAS_CONFLICT` | Backward compatible | SCN-A (GF-001, custom alias) |
 | 1.2.0 | 2026-09-26 | `CreateLinkRequest.maxClicks`, `LinkResponse.maxClicks`; code `INVALID_CLICK_LIMIT`; `410` for click-exhausted links | Backward compatible | SCN-B (BF-001, click limit) |
 

@@ -55,7 +55,7 @@ decision, and release readiness is blocked until then.
 | G1 | Constitution ratified | PENDING RATIFICATION | — | — |
 | G2 | Requirements approved | PENDING RATIFICATION | — | — |
 | G3 | Clarifications decided | PENDING RATIFICATION | — | — |
-| G4 | Architecture and ADRs accepted | NOT YET REACHED | — | — |
+| G4 | Architecture and ADRs accepted | PENDING RATIFICATION | — | — |
 | G5 | Implementation may start | NOT YET REACHED | — | — |
 | G6 | Release readiness decided | NOT YET REACHED | — | — |
 | G7 | Final submission | NOT YET REACHED | — | — |
@@ -235,3 +235,25 @@ and decides whether redirects may be cached.
   synthetic check data, append-only audit, superseded human decisions); FR-REL-05 limits
   compensation to synthetic data created by the same run.
 - **Contradictions found**: none remaining; the anonymous-access wording was replaced throughout.
+
+---
+
+## G4 — Architecture (plan and ADRs)
+
+- **Artifacts**: [`plan.md`](../../specs/001-agentic-url-shortener/plan.md),
+  [`research.md`](../../specs/001-agentic-url-shortener/research.md),
+  [`data-model.md`](../../specs/001-agentic-url-shortener/data-model.md),
+  [`contracts/`](../../specs/001-agentic-url-shortener/contracts/), and the 19 ADRs indexed in
+  [`docs/adr/README.md`](../adr/README.md) (inventory, decisions needing approval, deferrable
+  decisions, plan conflicts found and fixed, missing information).
+- **How to decide**: for each ADR, change `## Status` to `Accepted (YYYY-MM-DD, <your name>)` or
+  `Rejected (…, reason)`, then record the overall decision below. A rejected ADR sends the work
+  back to `/speckit-plan`, followed by `/speckit-analyze`.
+- **Assistant recommendation**: accept all 19. Review ADR-005 (custom engine), ADR-017
+  (deterministic agents), and ADR-011 (replanning semantics) most carefully: they shape most of
+  the code.
+- **Decision**: _pending_ · **Decided by**: _pending_ · **Date**: _pending_ · **Notes**: _pending_
+
+| ADR | Candidate decision |
+|-----|--------------------|
+| ADR-001 … ADR-019 | _pending_ (record per ADR in each file's Status section) |

@@ -140,7 +140,7 @@ Add a `simulation` block to a submission (schema `SimulationOptions`), for examp
 | Drill | Simulation | Expected observable result |
 |-------|-----------|----------------------------|
 | RDR-01 retry | `TRANSIENT_ERROR` ×2 on `TESTING` | `TESTING` attempts = 3; run completes; reliability report has a recovered event |
-| RDR-02 fallback | `PERMANENT_ERROR` on `IMPACT_ANALYSIS` | fallback `CATALOG_ONLY` analysis, `degraded = true`, readiness `READY_WITH_ACCEPTED_LIMITATIONS` |
+| RDR-02 fallback | `PERMANENT_ERROR` on `DOCUMENTATION` | template-documentation fallback, `degraded = true`, `FALLBACK_USED` decision, readiness `READY_WITH_ACCEPTED_LIMITATIONS` (a fallback on `IMPACT_ANALYSIS` instead fails mandatory policy `CHG-002` and needs an approved exception) |
 | RDR-03 compensation | `VERIFICATION_FAILURE` on `RELEASE` | capability withdrawn, run `SAFE_STOPPED` |
 | RDR-04 gate deadline | `gateDeadlineSeconds: 5`, then do not decide | run `SAFE_STOPPED` after the deadline |
 | RDR-05 resume | `DELAY` 20000 ms on `DESIGN`; stop the app mid-run; start it again | run resumes and completes; `REQUIREMENT_INGESTION` attempts stay 1 |

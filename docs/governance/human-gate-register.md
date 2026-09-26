@@ -51,7 +51,7 @@ decision, and release readiness is blocked until then.
 |------|-------------------|--------|------------|------|
 | G1 | Constitution ratified | PENDING RATIFICATION | — | — |
 | G2 | Requirements approved | PENDING RATIFICATION | — | — |
-| G3 | Clarifications decided | NOT YET REACHED | — | — |
+| G3 | Clarifications decided | PENDING RATIFICATION | — | — |
 | G4 | Architecture and ADRs accepted | NOT YET REACHED | — | — |
 | G5 | Implementation may start | NOT YET REACHED | — | — |
 | G6 | Release readiness decided | NOT YET REACHED | — | — |
@@ -109,7 +109,7 @@ decision, and release readiness is blocked until then.
 - **Assistant recommendation**: approve, after deciding the three open clarification markers at G3.
   Pay particular attention to every requirement tagged `[Derived · …]`: they are engineering
   inferences, not assignment text. Also review the three scenario payloads (custom alias, click
-  limit, default expiry) and the Proposed Validation Targets (PVT-01..PVT-25), which are
+  limit, default expiry) and the Proposed Validation Targets (PVT-01..PVT-26), which are
   assumptions, not client requirements.
 - **Decision**: _pending_ · **Decided by**: _pending_ · **Date**: _pending_ · **Notes**: _pending_
 
@@ -118,7 +118,7 @@ decision, and release readiness is blocked until then.
 | Rejection criterion | Where the specification addresses it |
 |---------------------|--------------------------------------|
 | chooses technologies prematurely | No language, framework, database, or platform named; CON-03 |
-| silently resolves ambiguity | Ambiguity Register AMB-01..AMB-09; 3 `[NEEDS CLARIFICATION]` markers; assumptions ASM-01..ASM-10 labeled as proposals |
+| silently resolves ambiguity | Ambiguity Register AMB-01..AMB-11; the 3 `[NEEDS CLARIFICATION]` markers were resolved only provisionally at clarify (G3); assumptions ASM-01..ASM-11 labeled as proposals |
 | lacks negative behavior | `(negative)` acceptance scenarios in US1-US6; Edge Cases section |
 | omits a required scenario | SCN-A, SCN-B, SCN-C with fixed inputs and evidence lists |
 | presents orchestration as a linear chain | FR-ORC-02/04/05/06, parallel `‖` paths in every scenario, FR-RPL-* |
@@ -126,3 +126,109 @@ decision, and release readiness is blocked until then.
 | lacks recovery or safe-stop | FR-REL-01..11, drills RDR-01..07 |
 | cannot be tested | every FR is a MUST statement with an observable outcome; NFR verification column |
 | cannot be traced | stable identifiers; provenance tags `[Confirmed · …]` / `[Derived · …]`; Traceability Notes |
+
+---
+
+## G3 — Clarifications
+
+- **Artifact**: `## Clarifications` → `### Session 2026-09-26` in
+  [`spec.md`](../../specs/001-agentic-url-shortener/spec.md), and its Ambiguity Register.
+- **How to decide**: answer each question below with an option letter (or your own short answer).
+  Where your answer differs from the provisional one, tell the assistant, e.g. "G3 Q2: A". It
+  will record your words, re-run the impact analysis (`/speckit-analyze`), and replan the affected
+  artifacts.
+- **Decision**: _pending_ · **Decided by**: _pending_ · **Date**: _pending_ · **Notes**: _pending_
+
+### Q1 — Should runtime stage agents call an external AI (LLM) service, or run as deterministic rule-based workers without network access?
+
+*Type*: architectural decision. *Why it matters*: decides whether runs are reproducible offline,
+whether the prototype needs API keys, and what the implementation stage actually does.
+
+| Option | Description | Engineering impact |
+|--------|-------------|--------------------|
+| **A (provisional)** | Deterministic rule-based agents; no external AI at runtime; an AI-backed agent can be registered later with the deterministic agent as fallback | Reproducible, offline, testable; no secrets; "intelligence" limited to explicit rules and knowledge models |
+| B | LLM-backed agents for analysis, design, and documentation, with deterministic fallback | Richer outputs; needs API key and network; non-deterministic tests need mocks; adds a secret to manage |
+| C | LLM agents that also generate and apply source code at runtime | Highest autonomy and risk; unreviewed code changes at runtime conflict with Principle III |
+
+**Recommended: A**, because the constitution requires local runnability without paid services or real
+secrets. It also keeps the assessment focus on orchestration; B is recorded as a deferred
+enhancement.
+
+### Q2 — Should creating short links be open to anonymous clients, or require an authenticated API consumer?
+
+*Type*: architectural decision (security posture). *Why it matters*: sets the abuse surface of the
+public API and what the security tests must prove.
+
+| Option | Description | Engineering impact |
+|--------|-------------|--------------------|
+| A | Anonymous creation, per-IP rate limiting; control plane authenticated | Simplest demo; open to anonymous phishing/spam link creation; IP limits weak behind NAT |
+| **B (provisional)** | Creation, metadata, and analytics require an authenticated API consumer; redirects public | Secure default; per-consumer limits and accountability; demo needs a consumer credential |
+| C | Everything authenticated, including redirects | Breaks the core use of a shortener (sharing links) |
+
+**Recommended: B**, because Principle V requires secure defaults, and a financial-services
+reviewer will expect authenticated write APIs.
+
+### Q3 — When the same long URL is shortened twice, should the service return the existing short link or create a new one?
+
+*Type*: functional rule (proposed assumption). *Why it matters*: decides uniqueness rules in the
+data model and what idempotency means.
+
+| Option | Description | Engineering impact |
+|--------|-------------|--------------------|
+| **A (provisional)** | Always create a new link; idempotency keys make retries safe | Simple; no cross-consumer linkage; compatible with per-link expiry, limits, aliases |
+| B | Global de-duplication by target URL | Reveals that another consumer shortened the URL; conflicts with per-link options |
+| C | De-duplicate per consumer and identical options | Extra lookup index; surprising when a consumer wants two tracked links |
+
+**Recommended: A.**
+
+### Q4 — When a released capability is withdrawn (by rollback or compensation), what should happen to links that consumers already created with it?
+
+*Type*: architectural decision (compensation semantics). *Why it matters*: consumers may already
+have shared these links, so this is a case where rollback is impossible and compensation
+decides the outcome.
+
+| Option | Description | Engineering impact |
+|--------|-------------|--------------------|
+| **A (provisional)** | Withdrawal stops new use only; existing links keep their stored behavior | Non-destructive; withdrawal is a true rollback of release state; stored rules (for example click limits) are never silently dropped |
+| B | Disable affected links | Destructive for consumers; would require a human approval gate for every withdrawal |
+| C | Delete affected links | Irreversible data loss; prohibited for automated execution |
+
+**Recommended: A.**
+
+### Q5 — How accurate must click analytics be?
+
+*Type*: architectural decision. *Why it matters*: trades redirect speed against counting accuracy
+and decides whether redirects may be cached.
+
+| Option | Description | Engineering impact |
+|--------|-------------|--------------------|
+| **A (provisional)** | Exact: count synchronously before responding; temporary, non-cacheable redirects | One extra write per redirect; exact counts (required anyway for click-limited links in SCN-B) |
+| B | Eventually consistent: asynchronous counting | Faster redirects; clicks can be lost on crash; needs a queue or buffer |
+| C | Best effort: permanent, cacheable redirects | Lowest load; repeat visits invisible; analytics undercount |
+
+**Recommended: A.**
+
+### Deferred questions (question quota of 5 reached)
+
+| ID | Question | Impact | Current assumption | Owner | Decision point |
+|----|----------|--------|--------------------|-------|----------------|
+| AMB-04 | How long do gates wait before safe-stop? | Governance, demo timing | Configurable per gate; default 24 h (PVT-13) | Candidate | G3 |
+| AMB-07 | What is the audit retention period? | Compliance policy | 365 days (PVT-18) | Candidate | G3 |
+| AMB-08 | Is safe-stop resumable? | State model | Terminal; continuing requires a new run (ASM-08) | Candidate | G3 |
+| AMB-09 | Which capabilities serve as scenario payloads? | Scenario credibility | Custom alias, click limit, default expiry | Candidate | G2 |
+| AMB-11 | Who may answer clarification questions? | Governance | A human with the approver role (ASM-11) | Candidate | G3 |
+
+### Clarification findings recorded in the specification
+
+- **Non-testable wording fixed**: "promptly" (FR-OPS-02, US1-13) now references PVT-24; "removed
+  afterwards" (FR-ORC-16) now means "no later than the run's terminal state"; "oversize fields"
+  (FR-ORC-01) now references PVT-26; bounded values in FR-LNK/ANL/REL/GOV/ORC now cite their
+  PVT targets.
+- **Missing negative behavior added**: unauthenticated creation, metadata, and analytics requests
+  are rejected (US1 scenario 14).
+- **Human approval points**: clarification, architecture approval, policy exception, change
+  control after approval, release (including acceptance of limitations) — FR-GOV-01.
+- **Rollback impossible, compensation required**: listed under Edge Cases (capability exposure,
+  synthetic check data, append-only audit, superseded human decisions); FR-REL-05 limits
+  compensation to synthetic data created by the same run.
+- **Contradictions found**: none remaining; the anonymous-access wording was replaced throughout.

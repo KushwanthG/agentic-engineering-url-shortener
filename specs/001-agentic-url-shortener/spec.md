@@ -59,12 +59,28 @@ repository's development process and stay unavailable to consumers until a run r
 | Autonomy budget | Per-run limits on automated effort (stage attempts, processing time) |
 | Synthetic data | Data created by automated checks; always labeled and cleaned up |
 
+## Clarifications
+
+### Session 2026-09-26
+
+> Delegated session: the candidate was not available to answer. Each answer below is the
+> assistant's recommended option, recorded as a **provisional decision pending ratification at
+> Gate G3**; the full option tables are in
+> [`docs/governance/human-gate-register.md`](../../docs/governance/human-gate-register.md). A
+> different answer at G3 triggers impact analysis and replanning of the affected artifacts.
+
+- Q: Should the runtime stage agents call an external AI (LLM) service, or run as deterministic rule-based workers without network access? → A: Option A — deterministic, rule-based agents with no external AI calls at runtime; the stage contract allows an AI-backed agent to be registered later with the deterministic agent as its fallback; capabilities are coded through the repository's governed development process, and the runtime implementation stage verifies and releases them. [Architectural decision · PROVISIONAL, pending G3]
+- Q: Should creating short links be open to anonymous clients, or require an authenticated API consumer? → A: Option B — link creation, link metadata, and analytics require an authenticated API consumer (pre-provisioned, labeled demonstration credentials); redirects stay public; creation is rate-limited per API consumer, and not-found outcomes are throttled per client network address. [Architectural decision (security posture) · PROVISIONAL, pending G3]
+- Q: When the same long URL is shortened twice, should the service return the existing short link or create a new one? → A: Option A — always create a new link and never de-duplicate by target URL; clients make retries safe with an idempotency key. [Functional rule · PROVISIONAL, pending G3]
+- Q: When a released capability is withdrawn (by rollback or compensation), what should happen to links that consumers already created with it? → A: Option A — withdrawal only stops new use of the capability; links already created keep their stored behavior (aliases keep resolving, stored click limits stay enforced, assigned expiries remain). Withdrawal is therefore a rollback of release state and never alters consumer data; disabling or deleting consumer links is outside automated execution. [Architectural decision (compensation semantics) · PROVISIONAL, pending G3]
+- Q: How accurate must click analytics be? → A: Option A — exact: every redirect is counted synchronously before the redirect response is returned; redirects are temporary and not cacheable, so repeat visits are counted. Eventually consistent counting is a documented scale-out option, not part of this prototype. [Architectural decision · PROVISIONAL, pending G3]
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Shorten, share, and track a link (Priority: P1)
 
-**Actor**: API consumer. An API consumer submits a long URL and receives a short link. Anyone who
-follows the short link is redirected to the original URL. The consumer can see how often the link
+**Actor**: API consumer. An authenticated API consumer submits a long URL and receives a short
+link. Anyone who follows the short link is redirected to the original URL, without credentials. The consumer can see how often the link
 was used, and a link can be given an expiry time.
 
 **Why this priority**: the demonstration domain must work end-to-end; every orchestration scenario
@@ -75,9 +91,9 @@ using the orchestration system.
 
 **Acceptance Scenarios**:
 
-1. **Given** a valid `https` URL, **When** the consumer creates a short link, **Then** a unique
-   short code, the full short URL, the normalized target URL, and the creation time are returned.
-   *(FR-LNK-01, FR-LNK-04)*
+1. **Given** an authenticated API consumer and a valid `https` URL, **When** the consumer creates a
+   short link, **Then** a unique short code, the full short URL, the normalized target URL, and
+   the creation time are returned. *(FR-LNK-01, FR-LNK-04)*
 2. **Given** an active short link, **When** a client resolves its code, **Then** the client is
    redirected to the target URL and the redirect is marked as not cacheable. *(FR-RED-01, FR-RED-02)*
 3. **Given** a link resolved three times, **When** the consumer reads its analytics, **Then** the
@@ -98,15 +114,20 @@ using the orchestration system.
 9. **Given** an identical creation request repeated with the same idempotency key, **When** both
    complete, **Then** the same short link is returned twice and only one link exists;
    *(negative)* reusing the key with a different payload is rejected. *(FR-LNK-08)*
-10. *(negative)* **Given** a client that has exceeded the creation rate limit, **When** it requests
-    another link, **Then** the request is rejected with a retry-after indication. *(FR-LNK-10)*
+10. *(negative)* **Given** an API consumer that has exceeded the creation rate limit, **When** it
+    requests another link, **Then** the request is rejected with a retry-after indication.
+    *(FR-LNK-10)*
 11. **Given** 200 concurrent resolutions of the same active link, **When** all complete, **Then**
     the total click count equals the number of successful redirects. *(FR-ANL-05)*
 12. **Given** analytics recording fails, **When** an active link without click-dependent rules is
     resolved, **Then** the redirect still succeeds and the failure is counted. *(FR-ANL-04)*
 13. **Given** the link store is unavailable, **When** creation or resolution is requested, **Then**
-    a temporarily-unavailable outcome is returned promptly and readiness reports not-ready.
+    a temporarily-unavailable outcome is returned within the fail-fast bound (PVT-24) and readiness
+    reports not-ready.
     *(FR-OPS-01, FR-OPS-02)*
+14. *(negative)* **Given** a request without valid consumer credentials, **When** link creation,
+    metadata, or analytics is requested, **Then** it is rejected as unauthenticated; **and** an
+    active code is still redirected for a client without credentials. *(FR-LNK-13)*
 
 ---
 
@@ -316,11 +337,21 @@ audit integrity, lineage, and the reliability report.
 - A change request arrives while an affected stage is in flight: the in-flight result is discarded
   and the stage re-executes under the new plan version.
 - Clarification answers introduce new ambiguity: another clarification round is opened; after the
-  maximum number of rounds the run safe-stops.
+  maximum number of rounds (PVT-14) the run safe-stops.
 - A policy exception expires between compliance evaluation and the release decision: readiness
   becomes `NOT READY` and release approval is refused.
 - Compensation itself fails: the run safe-stops with a manual-intervention flag.
 - A run requests fault injection while fault injection is disabled: the run is rejected at creation.
+- A released capability is withdrawn after consumers used it: existing links keep their stored
+  behavior; only new use of the capability is refused (FR-CAP-01).
+- Cases where rollback is impossible, so compensation applies (FR-REL-05):
+  - consumers may already have shared or followed links created while a capability was released —
+    compensation withdraws the capability for new use and records the exposure window;
+  - acceptance checks created synthetic links and click events in the live store — compensation
+    deletes exactly the synthetic records created by the run;
+  - audit events are append-only — a failed or reversed step is compensated by new audit events,
+    never by erasing history;
+  - human decisions cannot be undone — they are superseded by new decisions that reference them.
 
 ## Required Scenarios *(assignment deliverable, A§5)*
 
@@ -479,34 +510,37 @@ constitution; `[Derived · parent]` = engineering derivation that requires appro
 - **FR-LNK-02** [Confirmed · C:V, G§7]: The system MUST accept only the web schemes `http` and
   `https` and MUST reject any other scheme with a validation error that names the reason.
 - **FR-LNK-03** [Derived · C:V]: The system MUST reject target URLs that embed user credentials,
-  lack a host, exceed the maximum length, name a local host (`localhost` and its subdomains), use a
+  lack a host, exceed the maximum length (PVT-01), name a local host (`localhost` and its subdomains), use a
   loopback, private, link-local, unspecified, or multicast IP address in any notation, or point at
   the shortener's own host.
 - **FR-LNK-04** [Derived · C:V]: The system MUST store and return the normalized form of an
   accepted URL: lower-case scheme and host, internationalized host converted to ASCII form, default
   port removed, and path, query, and fragment preserved.
 - **FR-LNK-05** [Confirmed · G§7]: Short codes MUST be unique across all links. On a collision the
-  system MUST generate a new code, up to a bounded number of attempts; if uniqueness cannot be
+  system MUST generate a new code, up to a bounded number of attempts (PVT-03); if uniqueness cannot be
   achieved within the bound, creation MUST fail with a retryable error and no partial link.
 - **FR-LNK-06** [Derived · C:V]: Generated short codes MUST have a fixed length over letters and
-  digits and MUST NOT be predictable from previously issued codes.
+  digits (PVT-02) and MUST NOT be predictable from previously issued codes.
 - **FR-LNK-07** [Derived · G§7]: Two creation requests for the same target URL without an
-  idempotency key MUST produce two distinct links. [NEEDS CLARIFICATION: should the system instead
-  de-duplicate identical target URLs and return the existing link?]
+  idempotency key MUST produce two distinct links; the system MUST NOT de-duplicate by target URL,
+  so one consumer's links are never linked to another's.
 - **FR-LNK-08** [Confirmed · G§7]: When a creation request carries an idempotency key, repeating the
-  identical request with the same key within the idempotency window MUST return the original result
+  identical request with the same key within the idempotency window (PVT-04) MUST return the original result
   without creating another link, and reusing the key with a different payload MUST be rejected as
   a conflict.
 - **FR-LNK-09** [Confirmed · G§7]: Concurrent creation requests MUST NOT produce two links with the
   same code, nor more than one link for the same idempotency key.
-- **FR-LNK-10** [Confirmed · C:V]: Link creation MUST be rate-limited per client; a request over the
-  limit MUST be rejected with an indication of when to retry.
+- **FR-LNK-10** [Confirmed · C:V]: Link creation MUST be rate-limited per API consumer (PVT-05); a
+  request over the limit MUST be rejected with an indication of when to retry.
 - **FR-LNK-11** [Derived · A§2]: A consumer MUST be able to retrieve a link's metadata by code:
   target URL, creation time, expiry time, status (active or expired), and click limit if set.
 - **FR-LNK-12** [Confirmed · G§7]: A consumer MAY set an expiry time at creation. The expiry MUST be
-  in the future and no later than the maximum expiry horizon; otherwise creation MUST be rejected.
-- **FR-LNK-13** [Derived · C:V]: Link creation MUST be available to [NEEDS CLARIFICATION: anonymous
-  clients protected by rate limiting, or only authenticated clients?].
+  in the future and no later than the maximum expiry horizon (PVT-07); otherwise creation MUST be
+  rejected.
+- **FR-LNK-13** [Derived · C:V]: Link creation, link metadata retrieval, and analytics retrieval MUST
+  require an authenticated API consumer, and the creating consumer MUST be recorded with the link;
+  redirect resolution MUST remain public. A request without valid consumer credentials MUST be
+  rejected before any link lookup.
 
 ### Functional Requirements — Redirect resolution (RED)
 
@@ -518,18 +552,20 @@ constitution; `[Derived · parent]` = engineering derivation that requires appro
   outcome without redirecting.
 - **FR-RED-04** [Confirmed · G§7]: Resolving an expired link MUST return an expired outcome that is
   distinguishable from not-found and MUST NOT redirect.
-- **FR-RED-05** [Derived · C:V]: A client that produces an excessive number of not-found outcomes
-  within a time window MUST be throttled, to slow code enumeration.
+- **FR-RED-05** [Derived · C:V]: A client network address that produces more not-found outcomes
+  than the enumeration threshold (PVT-06) MUST be throttled for the rest of the window, to slow
+  code enumeration.
 
 ### Functional Requirements — Analytics (ANL)
 
 - **FR-ANL-01** [Confirmed · A§2, G§7]: Each successful redirect MUST be counted exactly once in the
-  link's analytics (total click count and last-accessed time) and recorded as a click event with
-  its timestamp and, when present, the referrer's host.
+  link's analytics (total click count and last-accessed time), before the redirect response is
+  returned, and recorded as a click event with its timestamp and, when present, the referrer's
+  host.
 - **FR-ANL-02** [Confirmed · C:V]: Analytics MUST NOT store raw client IP addresses or other direct
   personal identifiers.
 - **FR-ANL-03** [Derived · A§2]: A consumer MUST be able to retrieve a link's analytics: total
-  clicks, last-accessed time, and click counts per day for a bounded recent window.
+  clicks, last-accessed time, and click counts per day for a bounded recent window (PVT-10).
 - **FR-ANL-04** [Confirmed · G§7]: A failure to record analytics MUST NOT prevent the redirect of a
   link that has no click-dependent rule, and each such failure MUST be counted in an operational
   metric.
@@ -541,7 +577,8 @@ constitution; `[Derived · parent]` = engineering derivation that requires appro
 - **FR-OPS-01** [Confirmed · G§7]: The system MUST expose liveness and readiness indicators;
   readiness MUST report not-ready while the link store is unavailable.
 - **FR-OPS-02** [Confirmed · G§7]: While the link store is unavailable, creation and resolution MUST
-  fail promptly with a retryable temporarily-unavailable outcome and MUST NOT leave partial writes.
+  fail within the fail-fast bound (PVT-24) with a retryable temporarily-unavailable outcome and MUST
+  NOT leave partial writes.
 - **FR-OPS-03** [Derived · C:V]: All error outcomes MUST use one machine-readable format containing
   an error code, a human-readable message, and the correlation identifier, and MUST NOT expose
   internal details such as stack traces or query text.
@@ -554,7 +591,9 @@ constitution; `[Derived · parent]` = engineering derivation that requires appro
 - **FR-CAP-01** [Derived · A§4.4, A§4.7]: Capabilities introduced by the scenarios MUST be delivered
   in an unreleased state and become available to consumers only when an orchestration run releases
   them. While unreleased, a request that uses the capability's input MUST be rejected with a
-  "capability not available" error and MUST NOT be silently ignored.
+  "capability not available" error and MUST NOT be silently ignored. Withdrawing a released
+  capability MUST only stop new use of it: links already created with it MUST keep their stored
+  behavior (aliases keep resolving, stored click limits stay enforced, assigned expiries remain).
 - **FR-CAP-02** [Derived · SCN-A]: When released, the custom-alias capability MUST satisfy GF-001
   AC-1 to AC-6.
 - **FR-CAP-03** [Derived · SCN-B]: When released, the click-limit capability MUST satisfy BF-001
@@ -567,8 +606,8 @@ constitution; `[Derived · parent]` = engineering derivation that requires appro
 
 - **FR-ORC-01** [Confirmed · G§7]: An authorized requester MUST be able to submit a requirement
   (title, narrative, optional type, optional acceptance criteria, optional constraints) and receive
-  a run identifier. Invalid submissions (missing title or narrative, oversize fields) MUST be
-  rejected.
+  a run identifier. Invalid submissions (missing title or narrative, fields beyond the submission
+  limits in PVT-26) MUST be rejected.
 - **FR-ORC-02** [Confirmed · A§4.4]: Each run MUST execute an explicit, persisted dependency graph of
   stages (the plan). The plan MUST be validated as acyclic with resolvable dependencies before
   execution; an invalid plan MUST NOT execute.
@@ -601,8 +640,9 @@ constitution; `[Derived · parent]` = engineering derivation that requires appro
   prohibited transition MUST be rejected and recorded.
 - **FR-ORC-12** [Confirmed · A§4.7]: Each agent MUST be limited to the actions declared for its stage
   type; in particular, agents MUST NOT decide gates, change policies, or release capabilities
-  outside the release stage. Runtime agents MUST [NEEDS CLARIFICATION: run deterministically and
-  offline, or may they call an external AI (LLM) service?].
+  outside the release stage. Runtime agents MUST run deterministically without calling external AI
+  services; the stage contract MUST allow an AI-backed agent to be registered later, with the
+  deterministic agent as its fallback.
 - **FR-ORC-13** [Confirmed · G§7]: Requirement analysis MUST record each quality check performed
   (completeness, consistency, testability, policy, architecture boundary) with its result, and for
   a requirement that passes all checks MUST record why clarification is not required.
@@ -616,19 +656,22 @@ constitution; `[Derived · parent]` = engineering derivation that requires appro
   rather than report success.
 - **FR-ORC-16** [Confirmed · A§4.5]: The testing stage MUST execute acceptance checks derived from
   the requirement's acceptance criteria against the running service and record a result per
-  criterion; data created by these checks MUST be labeled synthetic and removed afterwards.
+  criterion; data created by these checks MUST be labeled synthetic and removed no later than the
+  run's terminal state.
 - **FR-ORC-17** [Confirmed · A§4.8]: Every run that reaches a terminal state MUST produce a final
   engineering summary covering plan and rationale, artifacts, decisions and approvals, policy
   outcomes, validation results, risks, assumptions, limitations, metrics, and the terminal outcome.
 - **FR-ORC-18** [Derived · A§4.7, C:II]: Each run MUST have an autonomy budget (maximum total stage
-  attempts and maximum processing time excluding time waiting for humans); exceeding it MUST
-  trigger safe-stop.
+  attempts and maximum processing time excluding time waiting for humans, PVT-17); exceeding it
+  MUST trigger safe-stop.
 
 ### Functional Requirements — Human governance (GOV)
 
 - **FR-GOV-01** [Confirmed · A§4.4, G§7]: Human gates MUST exist for blocking ambiguity
   (clarification), material changes (architecture approval), policy exceptions, change control
-  after approval, and release; destructive actions on user data MUST also require approval.
+  after approval, and release (which includes explicit acceptance of any listed limitations).
+  No agent or automated compensation may modify or delete non-synthetic consumer data; such a
+  destructive action is outside automated execution and would require an explicit human decision.
 - **FR-GOV-02** [Derived · A§4.4]: While a gate waits for a decision, stages that depend on it MUST
   NOT start, and stages that do not depend on it MAY continue.
 - **FR-GOV-03** [Confirmed · C:III]: Only an authenticated human principal holding the required role
@@ -641,8 +684,8 @@ constitution; `[Derived · parent]` = engineering derivation that requires appro
   re-opened.
 - **FR-GOV-06** [Confirmed · G§7]: A rejection MUST end the run with outcome `REJECTED` after
   compensating any completed side effects.
-- **FR-GOV-07** [Confirmed · C:III]: A gate that receives no decision by its deadline MUST NOT be
-  approved; the run MUST safe-stop and record the escalation.
+- **FR-GOV-07** [Confirmed · C:III]: A gate that receives no decision by its deadline (PVT-13) MUST
+  NOT be approved; the run MUST safe-stop and record the escalation.
 - **FR-GOV-08** [Confirmed · G§7]: A clarification gate MUST present each question with the detected
   ambiguity, its severity, the affected items, and answer options with their impact; answers MUST
   be recorded as decisions and MUST produce a new requirement version.
@@ -653,8 +696,8 @@ constitution; `[Derived · parent]` = engineering derivation that requires appro
 
 - **FR-REL-01** [Confirmed · A§4.4, C:VIII]: Stage failures MUST be classified as transient or
   permanent; only transient failures MUST be retried, up to a per-stage maximum with increasing
-  backoff.
-- **FR-REL-02** [Confirmed · G§7]: Every stage attempt MUST be bounded by a timeout; a timed-out
+  backoff (PVT-11).
+- **FR-REL-02** [Confirmed · G§7]: Every stage attempt MUST be bounded by a timeout (PVT-12); a timed-out
   attempt MUST be treated as a transient failure and its late result discarded.
 - **FR-REL-03** [Confirmed · A§4.4]: A stage MAY declare a fallback; after a permanent failure or
   retry exhaustion the fallback MUST execute, and its use MUST be recorded and marked as degraded.
@@ -662,12 +705,14 @@ constitution; `[Derived · parent]` = engineering derivation that requires appro
   fails, is rejected, or safe-stops after side effects, compensation MUST execute in reverse
   completion order and its outcome MUST be recorded.
 - **FR-REL-05** [Confirmed · C:VIII]: Rollback MUST be claimed only for state fully under system
-  control; side effects on consumer-visible data MUST be handled by compensation, and the evidence
-  MUST state which mechanism was used.
+  control (capability release state, artifact versions); side effects that cannot be undone
+  (synthetic data created by checks, audit records, exposure of a released capability to
+  consumers) MUST be handled by compensation, and the evidence MUST state which mechanism was used.
+  Compensation MUST only remove data labeled synthetic and created by the same run.
 - **FR-REL-06** [Confirmed · A§4.4]: A run MUST safe-stop when a mandatory policy fails without an
   approved exception, retries and fallback are exhausted, a gate deadline passes, compensation
-  fails, the autonomy budget is exceeded, the maximum clarification rounds are exceeded, or an
-  operator requests it. Safe-stop MUST prevent new stage starts, apply compensation, persist state,
+  fails, the autonomy budget (PVT-17) is exceeded, the maximum clarification rounds (PVT-14) are
+  exceeded, or an operator requests it. Safe-stop MUST prevent new stage starts, apply compensation, persist state,
   and record a terminal outcome.
 - **FR-REL-07** [Confirmed · G§7]: An operator MUST be able to pause a run (no new stage starts;
   in-flight stages finish) and resume it.
@@ -676,8 +721,8 @@ constitution; `[Derived · parent]` = engineering derivation that requires appro
   effects MUST NOT be repeated.
 - **FR-REL-09** [Confirmed · C:VIII]: Duplicate stage completions (for example a late result after a
   re-dispatch) MUST be detected and ignored.
-- **FR-REL-10** [Derived · C:VIII]: If compensation fails after bounded retries, the run MUST
-  safe-stop with a manual-intervention flag.
+- **FR-REL-10** [Derived · C:VIII]: If compensation fails after bounded retries (PVT-16), the run
+  MUST safe-stop with a manual-intervention flag.
 - **FR-REL-11** [Derived · C:V, C:X]: For demonstrations and tests, a run MAY carry a fault-injection
   plan only when fault injection is explicitly enabled; injected faults MUST be labeled as simulated
   in all evidence, and fault injection MUST be disabled by default.
@@ -755,8 +800,9 @@ constitution; `[Derived · parent]` = engineering derivation that requires appro
 
 Application plane:
 
-- **Short Link**: code, target URL, creation time, optional expiry, optional click limit, click
-  count, last-accessed time, whether the code is a custom alias, whether it is synthetic.
+- **Short Link**: code, target URL, creating API consumer, creation time, optional expiry,
+  optional click limit, click count, last-accessed time, whether the code is a custom alias,
+  whether it is synthetic.
 - **Click Event**: link, occurrence time, referrer host; no personal identifiers.
 - **Idempotency Record**: key, request fingerprint, original result, creation and expiry time.
 - **Capability Release State**: capability, released or not, parameters, who changed it, when, and
@@ -782,7 +828,7 @@ Control plane:
   link to the previous event.
 - **Failure Event**: stage, classification, detection time, recovery start and completion times,
   recovery mechanism, recovered or not.
-- **Principal**: identity and roles (requester, approver, release owner, auditor).
+- **Principal**: identity and roles (API consumer, requester, approver, release owner, auditor).
 
 ## Non-Functional Requirements
 
@@ -794,7 +840,7 @@ Each NFR names its verification method. Numeric targets refer to Proposed Valida
 | NFR-SEC-01 | Security | 100% of the malicious and invalid URL patterns in the security test catalog (PVT-15) are rejected. | Security test suite |
 | NFR-SEC-02 | Security | Every control-plane operation requires an authenticated principal with the operation's role; 100% of unauthorized attempts are refused. | Per-operation authorization tests |
 | NFR-SEC-03 | Security | No secret or credential appears in logs, audit events, or artifacts. | Secret-scan policy + log capture test |
-| NFR-SEC-04 | Security | Creation and not-found throttling apply per client at PVT-05 and PVT-06. | Rate-limit tests |
+| NFR-SEC-04 | Security | Creation throttling applies per API consumer (PVT-05) and not-found throttling per client network address (PVT-06). | Rate-limit tests |
 | NFR-SEC-05 | Security | Dependencies are restricted to approved licenses and scanned for known vulnerabilities before release readiness. | License policy + dependency report |
 | NFR-REL-01 | Reliability | Redirect availability is not reduced by analytics failures for links without click rules. | Fault-injection test |
 | NFR-REL-02 | Reliability | Retries are bounded per PVT-11; no stage exceeds its maximum attempts. | Orchestration tests |
@@ -816,7 +862,7 @@ Each NFR names its verification method. Numeric targets refer to Proposed Valida
 | NFR-CHG-01 | Change safety | Every public API and stored-data change carries a version and a compatibility classification; breaking changes require change approval. | Contract and change-control policy |
 | NFR-CHG-02 | Change safety | Stored-data changes are additive and backward compatible so that withdrawing a capability loses no data. | Migration review + test |
 | NFR-AUT-01 | Controlled autonomy | Every agent's permitted actions are declared and enforced; out-of-scope actions are refused. | Agent permission tests |
-| NFR-AUT-02 | Controlled autonomy | The autonomy budget (PVT-24) bounds every run. | Budget exhaustion test |
+| NFR-AUT-02 | Controlled autonomy | The autonomy budget (PVT-17) bounds every run. | Budget exhaustion test |
 
 ## Success Criteria *(mandatory)*
 
@@ -847,10 +893,11 @@ Each assumption is proposed and requires approval at Gate G2 or G3. Owner: human
 
 - **ASM-01**: The prototype runs as a single instance with a local persistent store; multi-instance
   deployment is designed for but not delivered.
-- **ASM-02**: Human principals authenticate with pre-provisioned, clearly labeled demonstration
-  credentials; enterprise identity integration is out of scope.
-- **ASM-03**: Short-link statistics are readable by anyone who knows the code; there is no link
-  ownership.
+- **ASM-02**: Human principals and API consumers authenticate with pre-provisioned, clearly labeled
+  demonstration credentials; enterprise identity integration is out of scope (Clarifications Q2).
+- **ASM-03**: Link metadata and statistics are readable by any authenticated API consumer that
+  knows the code; there is no per-link ownership (EXC-01); the creating consumer is recorded for
+  accountability only.
 - **ASM-04**: Expired links are retained (not purged) so the expired outcome can be returned.
 - **ASM-05**: Time is the service's UTC clock; daily analytics buckets use UTC days.
 - **ASM-06**: Scenario capabilities are written through this repository's governed development
@@ -860,9 +907,11 @@ Each assumption is proposed and requires approval at Gate G2 or G3. Owner: human
 - **ASM-08**: Safe-stop is terminal for a run; continuing the work requires a new run that
   references the stopped one.
 - **ASM-09**: Redirects are temporary (not permanent) so they are not cached and every click is
-  counted (see AMB-05).
+  counted (AMB-05, Clarifications Q5).
 - **ASM-10**: Analytics are recorded synchronously with the redirect, giving exact counts at the
-  cost of one extra write per redirect (see AMB-06).
+  cost of one extra write per redirect (AMB-06, Clarifications Q5).
+- **ASM-11**: Clarification questions are answered by a human holding the approver role; the
+  requester may be consulted but does not decide (AMB-11).
 
 ## Constraints
 
@@ -882,15 +931,17 @@ Owner of every item: human candidate. Decision point: Gate G3 unless stated othe
 
 | ID | Question | Impact | Current assumption |
 |----|----------|--------|--------------------|
-| AMB-01 | May runtime agents call an external AI (LLM) service, and may they generate source code at runtime? | Scope, reproducibility, secrets, test determinism | Deterministic offline agents; capabilities delivered through the governed repository process (ASM-06) |
-| AMB-02 | Is link creation anonymous (rate-limited) or authenticated? | Security posture, API usability | Anonymous with rate limiting; control plane authenticated |
-| AMB-03 | Should identical target URLs be de-duplicated? | Data model, API semantics | No; idempotency keys cover retries (FR-LNK-07/08) |
-| AMB-04 | How long do gates wait before safe-stop? | Governance, demonstrability | Configurable per gate (PVT-13) |
-| AMB-05 | Permanent or temporary redirects? | Analytics accuracy vs. client caching | Temporary, not cacheable (ASM-09) |
-| AMB-06 | Exact synchronous analytics or eventually consistent? | Redirect latency vs. accuracy | Synchronous (ASM-10) |
-| AMB-07 | Audit retention period? | Compliance policy, storage | PVT-18 |
-| AMB-08 | Is safe-stop resumable? | State model | Terminal (ASM-08) |
-| AMB-09 | Which capabilities serve as scenario payloads? | Scenario credibility | Custom alias (A), click limit (B), default expiry (C) |
+| AMB-01 | May runtime agents call an external AI (LLM) service, and may they generate source code at runtime? | Scope, reproducibility, secrets, test determinism | Provisionally decided (Clarifications Q1): deterministic offline agents; capabilities delivered through the governed repository process (ASM-06) |
+| AMB-02 | Is link creation anonymous (rate-limited) or authenticated? | Security posture, API usability | Provisionally decided (Clarifications Q2): authenticated API consumers; public redirects |
+| AMB-03 | Should identical target URLs be de-duplicated? | Data model, API semantics | Provisionally decided (Clarifications Q3): no de-duplication; idempotency keys cover retries (FR-LNK-07/08) |
+| AMB-04 | How long do gates wait before safe-stop? | Governance, demonstrability | Deferred (question quota reached; constitution already mandates a safe outcome): configurable per gate, default PVT-13 |
+| AMB-05 | Permanent or temporary redirects? | Analytics accuracy vs. client caching | Provisionally decided (Clarifications Q5): temporary, not cacheable (ASM-09) |
+| AMB-06 | Exact synchronous analytics or eventually consistent? | Redirect latency vs. accuracy | Provisionally decided (Clarifications Q5): synchronous and exact (ASM-10) |
+| AMB-07 | Audit retention period? | Compliance policy, storage | Deferred (low design impact; configuration value): PVT-18 |
+| AMB-08 | Is safe-stop resumable? | State model | Deferred (constitution requires deterministic terminal outcomes): terminal (ASM-08) |
+| AMB-09 | Which capabilities serve as scenario payloads? | Scenario credibility | Deferred to G2 review of the scenario inputs: custom alias (A), click limit (B), default expiry (C) |
+| AMB-10 | What happens to links created with a capability that is later withdrawn? | Rollback vs. compensation correctness, consumer trust | Provisionally decided (Clarifications Q4): existing links keep stored behavior; only new use stops |
+| AMB-11 | Who may answer clarification questions? | Governance, separation of duties | Deferred (question quota reached): a human with the approver role (ASM-11) |
 
 ## Exclusions
 
@@ -912,8 +963,8 @@ All values are proposals (assumptions requiring approval), not confirmed client 
 | PVT-02 | Generated code format | 7 characters from 62 letters and digits |
 | PVT-03 | Collision regeneration attempts | 5 |
 | PVT-04 | Idempotency window | 24 hours |
-| PVT-05 | Creation rate limit | 30 requests per minute per client |
-| PVT-06 | Not-found throttle | 60 not-found outcomes per minute per client |
+| PVT-05 | Creation rate limit | 30 requests per minute per API consumer |
+| PVT-06 | Not-found throttle | 60 not-found outcomes per minute per client network address |
 | PVT-07 | Maximum expiry horizon | 5 years |
 | PVT-08 | Alias length | 3–32 characters |
 | PVT-09 | Click-limit range | 1–1,000,000 |
@@ -931,8 +982,9 @@ All values are proposals (assumptions requiring approval), not confirmed client 
 | PVT-21 | Scenario run processing time excluding human wait | ≤ 10 s |
 | PVT-22 | Resumption delay after process start | ≤ 30 s |
 | PVT-23 | Line coverage of domain and orchestration code | ≥ 80% |
-| PVT-24 | Autonomy budget reference | as PVT-17 |
+| PVT-24 | Fail-fast bound while the link store is unavailable | ≤ 2 s |
 | PVT-25 | Quickstart time | ≤ 15 minutes |
+| PVT-26 | Requirement submission limits | title ≤ 200 characters; narrative ≤ 10,000 characters; ≤ 30 acceptance criteria; ≤ 30 constraints |
 
 ## Traceability Notes
 

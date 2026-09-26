@@ -3,14 +3,20 @@
 # reliability tests can inject labeled, simulated faults.
 spring:
   datasource:
-    url: jdbc:h2:mem:test-${random.uuid};MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=10000
+    url: jdbc:h2:mem:test-${random.uuid};MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=10000;TIME ZONE=UTC
 
 logging:
   level:
     root: WARN
-    com.agentic.sdlc: INFO
+    com.agentic.urlshortener: INFO
 
 app:
+  shortener:
+    self-hosts: [sho.rt]
+    rate-limit:
+      # Tests share one context; rate-limit behavior is tested in RateLimitHttpTest with low limits.
+      creation-per-minute: 100000
+      not-found-per-minute: 100000
   security:
     principals:
       - id: demo-consumer

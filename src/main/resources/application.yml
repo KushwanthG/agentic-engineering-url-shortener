@@ -5,7 +5,7 @@ spring:
     name: agentic-sdlc-url-shortener
   datasource:
     # H2 is the runtime database (candidate directive); file mode so runs survive restarts.
-    url: jdbc:h2:file:./data/agentic-sdlc;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;LOCK_TIMEOUT=10000
+    url: jdbc:h2:file:./data/agentic-sdlc;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;LOCK_TIMEOUT=10000;TIME ZONE=UTC
     username: sa
     password: ""
     hikari:
@@ -38,6 +38,9 @@ management:
       probes:
         enabled: true
       show-details: never
+      group:
+        readiness:
+          include: readinessState,linkStore
 
 logging:
   pattern:
@@ -52,6 +55,7 @@ app:
     max-expiry: P1826D
     idempotency-window: PT24H
     analytics-window-days: 30
+    self-hosts: []
     reserved-aliases: [api, actuator, admin, health, login, logout, static, assets, swagger, docs, error, favicon.ico, robots.txt]
     rate-limit:
       creation-per-minute: 30

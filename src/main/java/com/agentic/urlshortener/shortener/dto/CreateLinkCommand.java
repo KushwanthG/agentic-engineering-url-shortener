@@ -1,0 +1,16 @@
+package com.agentic.urlshortener.shortener.dto;
+
+import java.time.Instant;
+
+/**
+ * A link-creation request as the service sees it: the raw client input plus the authenticated
+ * consumer and the optional idempotency key.
+ */
+public record CreateLinkCommand(
+        String url,
+        Instant expiresAt,
+        String alias,
+        Long maxClicks,
+        String consumerId,
+        String idempotencyKey) {
+}

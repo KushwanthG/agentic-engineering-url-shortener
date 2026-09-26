@@ -73,3 +73,42 @@ Mandatory validation, evidence, and security tasks are never cut at any checkpoi
 ## 7. Checkpoint records
 
 _(appended at CP1, CP2, CP3)_
+
+### Scope decision SD-1 (2026-09-26, before CP1)
+
+**Decision owner**: the human candidate, who instructed on 2026-09-26: "implement the tasks which
+needed before submission of this assignment". **Recorded by**: the assistant. **Status**: candidate
+instruction; subject to confirmation at G6.
+
+**Basis**: the assignment asks for the §4 capabilities and §5 deliverables within 2–3 days while
+"demonstrating engineering judgment"; it does not require every task of this plan. Section 5 of this
+document still applies: mandatory validation, evidence, and security tasks are not cut.
+
+**Deferred unless time remains after T124** (each recorded as a limitation in the final summary):
+
+| Task | Item | Why deferrable | Residual risk |
+|------|------|----------------|---------------|
+| T074 | Autonomy budget | beyond A§4.4; retries and safe-stop already bound agent work | a pathological loop is stopped by retry bounds only |
+| T096 | Late-ambiguity mid-run path | CP2 rule; SCN-C covers ambiguity at intake | mid-run clarification is untested |
+| T107 | Run reconstruction test | audit verification (T101) and lineage (T102) cover reconstruction | weaker restart-forensics evidence |
+| T109 | Evidence export scripts | evidence stays under `target/evidence/` and is referenced by path | manual copy step for reviewers |
+| T112 | Contract compatibility review doc | CHANGELOG plus contract tests cover 1.0→1.2 changes | no consumer-impact narrative |
+| T114 | Extensibility test | ADR-019 and architecture overview describe the extension points | extension claims are argued, not tested |
+| T115 | JaCoCo coverage gate | JaCoCo report still generated | coverage can regress unnoticed |
+| T119 | Traceability docs refresh | T108 enforces the matrix in the build | committed matrix copy may be stale |
+
+**Kept although optional-looking**: T062 (approval race), T110/T111 (contract and schema
+validation), T113 (performance), T127/T128 (secret and dependency scans), T132 (governance
+invariants) — they are validation, security, or critical-path evidence.
+
+**Result**: 121 of 132 tasks in scope for the assistant; T004, T125, T126 are human gates.
+
+### CP1 (after US1, T033) — 2026-09-26
+
+- **US1 complete?** Yes: T017–T032 done; 158 tests green in three consecutive full runs; packaged
+  jar smoke-tested (create, redirect, stats, SSRF rejection, 404 problem JSON, readiness).
+- **Elapsed time vs. plan**: not measured in hours (no time tracking was kept, so no figure is
+  claimed). Phase 3 also absorbed the package restructure requested by the candidate and a
+  Phase 2 audit concurrency defect found during the runs.
+- **Decision (CP1 rule)**: keep all US1 behavior; no simplification of not-found throttling was
+  needed. Scope decision SD-1 stands. Next: Phase 4 (orchestration core, SCN-A).

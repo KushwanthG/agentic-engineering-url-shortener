@@ -30,11 +30,14 @@ complexity. Relevant requirements: NFR-MNT-01/02, NFR-SCA-01, FR-CAP-01, FR-ORC-
 
 ## Decision
 
-Option A. One Spring Boot application with top-level packages `com.agentic.sdlc.platform`,
-`com.agentic.sdlc.shortener`, and `com.agentic.sdlc.orchestration`. The control plane reaches the
+Option A. One Spring Boot application with top-level packages `com.agentic.urlshortener.common`,
+`com.agentic.urlshortener.shortener`, and `com.agentic.urlshortener.orchestration`. The control plane reaches the
 shortener **only** through `orchestration.port.ApplicationPlanePort`, implemented by an in-process
 adapter. ArchUnit tests enforce: the shortener never imports orchestration; only the port adapter
-imports shortener services; agents never import governance or policy mutation services.
+imports shortener services; agents never import governance or policy mutation services. Inside each
+plane, code follows the conventional Spring Boot layers (`controller`, `dto`, `domain`,
+`repository`, `service`, `config`); the control plane adds its engine components (`engine`,
+`planning`, `governance`, `policy`, `reliability`, `audit`, `metrics`, `agent`, `knowledge`, `port`).
 
 ## Rationale
 
@@ -78,3 +81,13 @@ separate persistence, but no change to domain logic.
 
 `ArchitectureTest` (ArchUnit) rules run in every build; a code review in the pre-implementation
 review confirms the port is the only plane-crossing dependency.
+
+## Revision history
+
+- 2026-09-26: Base package renamed from `com.agentic.sdlc` to `com.agentic.urlshortener` at the
+  candidate's request (naming only; plane structure, dependency rules and decision unchanged). The
+  ADR remains `Proposed`.
+- 2026-09-26: Shared infrastructure package renamed `platform` → `common`, and each plane organised
+  into conventional Spring Boot layers (`controller`, `dto`, `domain`, `repository`, `service`,
+  `config`) at the candidate's request. Plane boundaries and ArchUnit rules unchanged (the `common`
+  rule replaces the `platform` rule). The ADR remains `Proposed`.

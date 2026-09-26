@@ -281,6 +281,9 @@ and decides whether redirects may be cached.
 | Item | Raised by | Status |
 |------|-----------|--------|
 | Review of the brownfield impact analysis before the click-limit code (task T086) | tasks.md | pending — added when T086 runs |
-| Change-control approval of contract versions 1.1.0 and 1.2.0 (task T112) | tasks.md | pending |
-| Change-control review of implementation-time refinements: generic error codes `RESOURCE_NOT_FOUND`, `METHOD_NOT_ALLOWED`, `UNSUPPORTED_MEDIA_TYPE` (T009); persistence schema types, `audit_chain_head`, `stage_attempt.scheduling_cycle`, `plan_version.trigger_type` (T007/T012) | Phase 2 checkpoint | pending (bundled into T112) |
+| Change-control approval of contract versions 1.1.0 and 1.2.0 (task T112; the review document is deferred by SD-1, the approval itself is still required) | tasks.md | pending |
+| Change-control review of implementation-time refinements: generic error codes `RESOURCE_NOT_FOUND`, `METHOD_NOT_ALLOWED`, `UNSUPPORTED_MEDIA_TYPE` (T009); persistence schema types, `audit_chain_head`, `stage_attempt.scheduling_cycle`, `plan_version.trigger_type` (T007/T012) | Phase 2 checkpoint | pending (was bundled into T112; T112 is deferred by SD-1, so review these directly or via the CHANGELOG) |
 | Exception for any accepted dependency-scan finding (task T128) | tasks.md | pending if applicable |
+| Scope decision SD-1 (defer T074, T096, T107, T109, T112, T114, T115, T119) recorded from the candidate's instruction of 2026-09-26 (`docs/assessment/timebox-and-scope.md`) | candidate instruction | pending confirmation at G6 |
+| ADR-001 revision: base package `com.agentic.urlshortener`, `common` package, layered plane packages (candidate request, 2026-09-26) | candidate request | pending ADR acceptance (G4) |
+| Phase 3 implementation deviations (b)–(g) and the audit-trail concurrency fix (`task-group-checkpoints.md`, Phase 3 row 11) | Phase 3 checkpoint | pending review |

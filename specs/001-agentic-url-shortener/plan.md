@@ -106,31 +106,36 @@ docs/
 
 ```text
 pom.xml  mvnw  mvnw.cmd  .mvn/wrapper/
-src/main/java/com/agentic/sdlc/
-├── AgenticSdlcApplication.java
-├── platform/                     # shared infrastructure (no business rules)
+src/main/java/com/agentic/urlshortener/
+├── UrlShortenerApplication.java
+├── common/                       # shared infrastructure (no business rules)
+│   ├── config/                   # Clock, filter registration and other cross-cutting beans
+│   ├── exception/                # ErrorCode, ApiException, problem-detail handler
 │   ├── security/                 # bearer-token filter, principals, roles, SecurityConfig
-│   ├── web/                      # correlation-id filter, problem-detail handler, ErrorCode
-│   ├── json/                     # canonical JSON + SHA-256 fingerprints
-│   └── time/                     # Clock configuration
-├── shortener/                    # APPLICATION PLANE
-│   ├── api/                      # LinkController, RedirectController, DTO records
-│   ├── domain/                   # ShortLink, ClickEvent, UrlPolicy, ShortCodeGenerator, AliasPolicy, rules
-│   ├── service/                  # LinkCreationService, RedirectService, LinkQueryService, ClickRecorder, IdempotencyService
-│   ├── capability/               # CapabilityService (release flags, preview scope), providers
-│   ├── ratelimit/                # TokenBucketRateLimiter
-│   └── persistence/              # Spring Data repositories and atomic update queries
-└── orchestration/                # CONTROL PLANE
-    ├── api/                      # WorkflowController, GovernanceController, OperationsController, EvidenceController
-    ├── model/                    # entities (WorkflowRun, StageNode, StageAttempt, Artifact, Decision, ...) and enums
+│   ├── util/                     # canonical JSON + SHA-256 fingerprints
+│   └── web/                      # correlation-id filter
+├── shortener/                    # APPLICATION PLANE (layered)
+│   ├── controller/               # LinkController, RedirectController
+│   ├── dto/                      # request/response records and service commands/views
+│   ├── domain/                   # JPA entities (ShortLink, ClickEvent, IdempotencyRecord, ...), UrlPolicy, ShortCodeGenerator, AliasPolicy
+│   ├── repository/               # Spring Data repositories and atomic update queries
+│   ├── service/                  # LinkCreationService, RedirectService, LinkQueryService, ClickRecorder, IdempotencyService,
+│   │                             # CapabilityService (release flags, preview scope), TokenBucketRateLimiter
+│   └── config/                   # ShortenerProperties, rate-limiter beans, LinkStoreHealthIndicator
+└── orchestration/                # CONTROL PLANE (layered, plus engine components)
+    ├── controller/               # WorkflowController, GovernanceController, OperationsController, EvidenceController
+    ├── dto/                      # request/response records and views
+    ├── domain/                   # entities (WorkflowRun, StageNode, StageAttempt, Artifact, Decision, AuditEvent, ...) and enums
+    ├── repository/               # Spring Data repositories
+    ├── service/                  # WorkflowService and other application services
     ├── engine/                   # RunCoordinator, StageDispatcher, StageTransitions, RunTransitions, PlanValidator, ReadinessEvaluator
     ├── planning/                 # PlanFactory, ReplanningService, InputFingerprinter
     ├── governance/               # GateService, ClarificationService, ChangeRequestService, DeadlineSweeper
     ├── policy/                   # PolicySet (YAML), PolicyRule beans, PolicyEngine, PolicyExceptionService
     ├── reliability/              # FailureClassifier, RetryPolicy, CompensationCoordinator, SafeStopService, RecoveryService, FaultInjector, AutonomyBudget
-    ├── audit/                    # AuditService (hash chain), AuditVerifier
+    ├── audit/                    # AuditService (hash chain), AuditHashing, verification
     ├── metrics/                  # FailureEventRecorder, ReliabilityReportService, meters
-    ├── agents/                   # StageAgent SPI, AgentRegistry, one agent per stage type, probes/
+    ├── agent/                    # StageAgent SPI, AgentRegistry, one agent per stage type, probes/
     ├── knowledge/                # CapabilityCatalog, AmbiguityLexicon, CodebaseScanner
     └── port/                     # ApplicationPlanePort (interface) + in-process adapter (integration/)
 src/main/resources/
@@ -138,7 +143,7 @@ src/main/resources/
 ├── db/migration/V1__shortener_baseline.sql … V4__click_limit.sql
 ├── orchestration/capability-catalog.yaml  ambiguity-lexicon.yaml  policy-set.yaml
 └── scenarios/scn-a-greenfield.json  scn-b-brownfield.json  scn-c-ambiguous.json
-src/test/java/com/agentic/sdlc/   # mirrors main packages; plus architecture/, contract/, e2e/, traceability/
+src/test/java/com/agentic/urlshortener/   # mirrors main packages; plus architecture/, contract/, e2e/, traceability/
 scripts/                          # demo helpers (PowerShell and bash)
 ```
 
@@ -679,7 +684,7 @@ changelog versioning, and `/speckit-analyze` after any upstream edit.
 | Repository security scans | secret patterns in tracked files; SBOM vulnerability scan (OSV-Scanner) | JUnit file scan; OSV-Scanner CLI | `security`; `docs/assessment/security-scans.md` | NFR-SEC-03, NFR-SEC-05, constitution V |
 | Governance invariants | across every end-to-end run: no stage downstream of an undecided gate started; no release after an unexcepted mandatory `FAIL`; no gate succeeded without a valid decision | audit-trail analysis | `e2e` | SC-004, FR-GOV-02/03, FR-POL-03 |
 | Architecture | plane boundaries, agent restrictions, layering | ArchUnit | `architecture` | NFR-MNT-01, NFR-AUT-01 |
-| Agents | each agent's output against its JSON Schema | JUnit + schema validation | `orchestration.agents` | FR-ORC-13..16 |
+| Agents | each agent's output against its JSON Schema | JUnit + schema validation | `orchestration.agent` | FR-ORC-13..16 |
 | End-to-end | SCN-A/B/C and RDR-01..07 over HTTP, with evidence export | `@SpringBootTest(RANDOM_PORT)` | `e2e` | SC-002 |
 | Release readiness | readiness outcomes, exception expiry | JUnit | `orchestration.policy` | FR-RDY-* |
 | Traceability | every FR and SCN id tagged by ≥ 1 test | source scan of `@Tag` | `traceability` | SC-003 |

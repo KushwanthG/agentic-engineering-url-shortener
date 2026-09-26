@@ -44,5 +44,7 @@ app:
         token-sha256: 2eb265314467fb0204f4672068f980fb5f8a4405c014ddbbe240874dac39db02
         roles: [REQUESTER, APPROVER, RELEASE_OWNER]
   orchestration:
+    # Tests call DeadlineSweeper.sweep() explicitly; the periodic sweep would race their assertions.
+    deadline-sweep-interval: PT1H
     fault-injection:
       enabled: true

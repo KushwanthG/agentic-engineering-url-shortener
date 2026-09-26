@@ -146,3 +146,35 @@ security rules unchanged (deny-by-default; redirect route public by design); all
 - The plane boundary is enforced by ArchUnit. Agents are permission-scoped.
 - The simulated approvals are labeled in the test, the decisions, and the evidence.
 - All tests are green.
+
+---
+
+## Checkpoint: Phase 5 — US3 govern high-impact decisions (T059–T066)
+
+| # | Item | Record |
+|---|------|--------|
+| 1 | Completed tasks | T059–T066 |
+| 2 | Requirements addressed | FR-GOV-02, FR-GOV-03, FR-GOV-04, FR-GOV-05, FR-GOV-06, FR-GOV-07, FR-GOV-09, FR-REL-06 (gate deadline path), NFR-AUT-01, NFR-SEC-02 |
+| 3 | ADRs followed | ADR-008 (human approval model), ADR-010 (compensation of synthetic data), ADR-015 (roles), ADR-005 (scheduler) |
+| 4 | Files created or changed | `governance/{GateService, DeadlineSweeper}`, `engine/RunCoordinator` (re-validation guard, `safeStop`, `escalateExpiredGate`), `domain/StageNode.reopen`, `repository/StageNodeRepository`, `reliability/CompensationCoordinator` (new), `config/SchedulingConfig` (new), `application.yml` / `application-test.yml` (`deadline-sweep-interval`); tests `governance/{SeparationOfDuties, ApprovalBinding, GateDeadline, ConcurrentGateDecision, GateRejection, WaitingGateIndependence}Test`, `security/GovernanceSecurityMatrixTest`, `ArchitectureTest`, `support/GovernanceHarness`; `docs/architecture/governance.md` |
+| 5 | Tests written before implementation | T059–T063 (red recorded); T065 verification tests |
+| 6 | Expected initial failures | requester self-approval accepted, late decision accepted, no invalidation, no escalation, no compensation |
+| 7 | Validation commands executed | see `tdd-evidence.md` Phase 5; `mvnw -B -ntp verify` |
+| 8 | Actual outcomes | 392 tests, 0 failures, BUILD SUCCESS |
+| 9 | Documentation updated | `docs/architecture/governance.md` (new); approval evidence remains SCN-A `E-A5-decisions.json` (decisions with bound fingerprints) |
+| 10 | Traceability updated | tests tagged FR-GOV-02..07, FR-GOV-09, NFR-AUT-01, NFR-SEC-02, RDR-04; tasks marked |
+| 11 | Deviations from plan | (a) `CompensationCoordinator` created early in its Phase 6 package with synthetic-data cleanup only; T070 extends it. (b) Safe-stop on deadline uses `RunCoordinator.safeStop` until `SafeStopService` (T071). (c) Re-opening an invalidated gate also re-opens every downstream stage as a new generation and invalidates downstream approvals: this interprets FR-GOV-05's "gate re-opened" for work that already consumed the approval. (d) The sweep interval is a plain property (`app.orchestration.deadline-sweep-interval`), not a field of `OrchestrationProperties`. (e) The exception-requester half of T059 moves to T076, where policy exceptions are implemented. |
+| 12 | New risks | the run lock and the deadline sweeper are in-process; valid for the single-process H2 deployment (ADR-003, backlog BL-02) |
+| 13 | New assumptions | a decision arriving after its deadline but before the sweep is refused (`DEADLINE_PASSED`), not recorded |
+| 14 | Remaining failures | none |
+| 15 | Commit boundary | Phase 5 |
+| 16 | Commit message | `feat(governance): enforce separation of duties, approval binding, and gate deadlines` |
+| 17 | Next task group | Phase 6 US4 — reliability, readiness, and drills (T067–T082, T074 deferred by SD-1) |
+| 18 | Human approval required | deviation (c) (re-open scope) and (a)–(e) for the candidate's review |
+
+**Pre-commit review**:
+- The governance hardening is limited to `GateService`, the scheduler guard, and the sweeper.
+- There are no contract or schema changes. The existing error codes (`SEPARATION_OF_DUTIES`,
+  `DEADLINE_PASSED`, `CONCURRENT_DECISION`) are now used.
+- The anti-bypass rules are executable.
+- All tests are green.

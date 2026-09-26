@@ -3,9 +3,10 @@ package com.agentic.urlshortener.orchestration.governance;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -33,36 +34,46 @@ import com.agentic.urlshortener.orchestration.engine.ArtifactStore;
 import com.agentic.urlshortener.orchestration.engine.RunAudit;
 import com.agentic.urlshortener.orchestration.engine.RunCoordinator;
 import com.agentic.urlshortener.orchestration.engine.RunLocks;
+import com.agentic.urlshortener.orchestration.reliability.CompensationCoordinator;
 import com.agentic.urlshortener.orchestration.repository.DecisionRepository;
 import com.agentic.urlshortener.orchestration.repository.StageNodeRepository;
 import com.agentic.urlshortener.orchestration.repository.WorkflowRunRepository;
 
 /**
- * Human decisions on approval gates (FR-GOV-01, 03, 09; ADR-008). Only an authenticated principal
- * holding the gate's role may decide; the decision records the actor, role, rationale, and the
- * fingerprints of the reviewed artifacts. The engine can never mark a gate succeeded on its own:
- * this service is the only path from {@code AWAITING_DECISION} to {@code SUCCEEDED} for a gate.
+ * Human decisions on approval gates (FR-GOV-01..07, 09; ADR-008). Only an authenticated principal
+ * holding the gate's role, who is not the run's requester, may decide, and only before the gate's
+ * deadline. The decision records the actor, role, rationale, and the fingerprints of the reviewed
+ * artifacts. The engine can never mark a gate succeeded on its own: this service is the only path
+ * from {@code AWAITING_DECISION} to {@code SUCCEEDED} for a gate. A rejection compensates the run's
+ * side effects and ends it {@code REJECTED}.
  */
 @Service
 public class GateService {
+
+    /** Gates the run's requester may not decide (FR-GOV-04). */
+    private static final Set<StageType> SEPARATED = EnumSet.of(StageType.ARCHITECTURE_APPROVAL, StageType.CHANGE_APPROVAL,
+            StageType.RELEASE_APPROVAL);
 
     private final WorkflowRunRepository runs;
     private final StageNodeRepository nodes;
     private final DecisionRepository decisions;
     private final ArtifactStore artifacts;
     private final RunCoordinator coordinator;
+    private final CompensationCoordinator compensation;
     private final RunLocks locks;
     private final RunAudit audit;
     private final TransactionTemplate tx;
     private final Clock clock;
 
     public GateService(WorkflowRunRepository runs, StageNodeRepository nodes, DecisionRepository decisions, ArtifactStore artifacts,
-            RunCoordinator coordinator, RunLocks locks, RunAudit audit, PlatformTransactionManager transactionManager, Clock clock) {
+            RunCoordinator coordinator, CompensationCoordinator compensation, RunLocks locks, RunAudit audit,
+            PlatformTransactionManager transactionManager, Clock clock) {
         this.runs = runs;
         this.nodes = nodes;
         this.decisions = decisions;
         this.artifacts = artifacts;
         this.coordinator = coordinator;
+        this.compensation = compensation;
         this.locks = locks;
         this.audit = audit;
         this.tx = new TransactionTemplate(transactionManager);
@@ -74,7 +85,7 @@ public class GateService {
             ApiException refusal = tx.execute(status -> check(runId, gate, principal));
             if (refusal != null) {
                 audit.record(runId, ActorType.HUMAN, principal.id(), "DECISION_REFUSED", gate.name(), null, null, "REFUSED",
-                        refusal.getMessage(), null);
+                        refusal.getMessage(), Map.of("code", refusal.code().name()));
                 throw refusal;
             }
             try {
@@ -87,29 +98,47 @@ public class GateService {
         return decision;
     }
 
-    /** Returns the reason to refuse the decision, or null when it may be recorded. */
+    /** Returns the reason to refuse the decision (audited), or null when it may be recorded; throws for unknown targets. */
     private ApiException check(UUID runId, StageType gate, ApiPrincipal principal) {
         WorkflowRun run = runs.findById(runId)
                 .orElseThrow(() -> new ApiException(ErrorCode.RUN_NOT_FOUND, "No workflow run " + runId + "."));
-        if (run.getStatus().isTerminal()) {
-            throw new ApiException(ErrorCode.RUN_TERMINAL, "The run is " + run.getStatus() + "; no further decisions are possible.");
-        }
         if (!ReviewBundles.isApprovalGate(gate)) {
             throw new ApiException(ErrorCode.ILLEGAL_STATE, gate + " is not an approval gate decided on this endpoint.");
         }
         StageNode node = nodes.findByRunIdAndStageKey(runId, gate)
                 .orElseThrow(() -> new ApiException(ErrorCode.ILLEGAL_STATE, gate + " is not part of this run's plan."));
+        if (alreadyDecided(runId, node)) {
+            return new ApiException(ErrorCode.CONCURRENT_DECISION, "A decision on " + gate + " was already recorded.");
+        }
+        if (run.getStatus().isTerminal()) {
+            return new ApiException(ErrorCode.RUN_TERMINAL, "The run is " + run.getStatus() + "; no further decisions are possible.");
+        }
         if (node.getStatus() != StageStatus.AWAITING_DECISION || node.getAwaiting() != AwaitingType.APPROVAL) {
-            throw new ApiException(ErrorCode.ILLEGAL_STATE, gate + " is not awaiting a decision (status " + node.getStatus() + ").");
+            return new ApiException(ErrorCode.ILLEGAL_STATE, gate + " is not awaiting a decision (status " + node.getStatus() + ").");
         }
         if (!principal.hasRole(gate.requiredRole())) {
             return new ApiException(ErrorCode.FORBIDDEN, "Deciding " + gate + " requires the role " + gate.requiredRole() + ".");
         }
+        if (SEPARATED.contains(gate) && principal.id().equals(run.getRequestedBy())) {
+            return new ApiException(ErrorCode.SEPARATION_OF_DUTIES,
+                    principal.id() + " is the requester of this run and cannot decide its " + gate + ".");
+        }
+        if (node.getDecisionDeadline() != null && now().isAfter(node.getDecisionDeadline())) {
+            return new ApiException(ErrorCode.DEADLINE_PASSED,
+                    "The decision deadline " + node.getDecisionDeadline() + " for " + gate + " has passed; the gate is escalated.");
+        }
         return null;
     }
 
+    /** The gate left AWAITING_DECISION in its current generation through a recorded human decision. */
+    private boolean alreadyDecided(UUID runId, StageNode node) {
+        boolean decidedState = node.getStatus() == StageStatus.SUCCEEDED || node.getStatus() == StageStatus.FAILED;
+        return decidedState && decisions.findByRunIdAndStageKeyAndValidTrueOrderByCreatedAtDesc(runId, node.getStageKey()).stream()
+                .anyMatch(d -> d.getDecisionType() == DecisionType.GATE);
+    }
+
     private Decision record(UUID runId, StageType gate, GateDecisionRequest request, ApiPrincipal principal) {
-        Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
+        Instant now = now();
         WorkflowRun run = runs.findById(runId).orElseThrow();
         StageNode node = nodes.findByRunIdAndStageKey(runId, gate).orElseThrow();
         String outcome = request.approve() ? "APPROVED" : "REJECTED";
@@ -121,27 +150,40 @@ public class GateService {
             node.succeedGate(decision, now);
             audit.transition(runId, gate.name(), StageStatus.AWAITING_DECISION, StageStatus.SUCCEEDED,
                     "approved by " + principal.id());
+            nodes.saveAndFlush(node);
         } else {
             String reason = gate + " rejected by " + principal.id() + ": " + request.rationale();
             node.fail(FailureClass.PERMANENT, reason, now);
             audit.transition(runId, gate.name(), StageStatus.AWAITING_DECISION, StageStatus.FAILED, reason);
+            nodes.saveAndFlush(node);
             reject(run, reason, now);
         }
-        nodes.saveAndFlush(node);
         return decision;
     }
 
+    /** FR-GOV-06: no new work, open stages cancelled, side effects compensated, outcome REJECTED. */
     private void reject(WorkflowRun run, String reason, Instant now) {
-        coordinator.markStopping(run.getId());
+        UUID runId = run.getId();
+        coordinator.markStopping(runId);
         RunStatus from = run.getStatus();
-        if (from == RunStatus.RUNNING || from == RunStatus.PAUSED) {
-            run.transitionTo(RunStatus.COMPENSATING, now);
-            audit.runTransition(run.getId(), from, RunStatus.COMPENSATING, reason);
-            from = RunStatus.COMPENSATING;
+        run.transitionTo(RunStatus.COMPENSATING, now);
+        audit.runTransition(runId, from, RunStatus.COMPENSATING, reason);
+        for (StageNode node : nodes.findByRunIdOrderByStageKeyAsc(runId)) {
+            StageStatus status = node.getStatus();
+            if (!status.isTerminal() && !status.satisfiesDependency()) {
+                node.transitionTo(StageStatus.CANCELLED);
+                audit.transition(runId, node.getStageKey().name(), status, StageStatus.CANCELLED, "run rejected");
+            }
         }
-        run.terminate(RunStatus.REJECTED, reason, now);
-        audit.runTransition(run.getId(), from, RunStatus.REJECTED, reason);
-        audit.system(run.getId(), "RUN_TERMINATED", "RUN", "REJECTED", reason, null);
+        boolean compensated = compensation.compensate(runId, reason);
+        // Compensation flushes and clears the persistence context: continue with a fresh copy of the run.
+        WorkflowRun current = runs.findById(runId).orElseThrow();
+        if (!compensated) {
+            current.requireManualIntervention();
+        }
+        current.terminate(RunStatus.REJECTED, reason, now);
+        audit.runTransition(runId, RunStatus.COMPENSATING, RunStatus.REJECTED, reason);
+        audit.system(runId, "RUN_TERMINATED", "RUN", "REJECTED", reason, null);
     }
 
     private Map<String, String> reviewBundle(UUID runId, StageType gate) {
@@ -154,5 +196,9 @@ public class GateService {
             }
         }
         return bound;
+    }
+
+    private Instant now() {
+        return clock.instant().truncatedTo(ChronoUnit.MICROS);
     }
 }

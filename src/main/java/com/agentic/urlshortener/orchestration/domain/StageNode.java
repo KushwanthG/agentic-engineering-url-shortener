@@ -166,6 +166,25 @@ public class StageNode extends AssignedIdEntity {
         finishedAt = now;
     }
 
+    /**
+     * Returns the stage to {@code PENDING} as a new generation: results of earlier attempts become stale
+     * and are discarded, and the stage is scheduled again (approval re-opened, re-plan).
+     */
+    public void reopen() {
+        transitionTo(StageStatus.PENDING);
+        generation++;
+        attempts = 0;
+        inputFingerprint = null;
+        reused = false;
+        degraded = false;
+        skipReason = null;
+        nextAttemptAt = null;
+        lastFailureClass = null;
+        lastFailureReason = null;
+        startedAt = null;
+        finishedAt = null;
+    }
+
     public void recordFailure(FailureClass failureClass, String reason) {
         lastFailureClass = failureClass;
         lastFailureReason = Texts.truncate(reason, 1000);

@@ -7,6 +7,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -33,6 +34,7 @@ import com.agentic.urlshortener.orchestration.config.OrchestrationProperties;
 import com.agentic.urlshortener.orchestration.domain.Artifact;
 import com.agentic.urlshortener.orchestration.domain.AttemptOutcome;
 import com.agentic.urlshortener.orchestration.domain.AwaitingType;
+import com.agentic.urlshortener.orchestration.domain.Decision;
 import com.agentic.urlshortener.orchestration.domain.FailureClass;
 import com.agentic.urlshortener.orchestration.domain.RequirementVersion;
 import com.agentic.urlshortener.orchestration.domain.RunStatus;
@@ -45,6 +47,7 @@ import com.agentic.urlshortener.orchestration.port.ApplicationPlanePort;
 import com.agentic.urlshortener.orchestration.port.DeferredApplicationPlanePort;
 import com.agentic.urlshortener.orchestration.port.PermissionScopedPort;
 import com.agentic.urlshortener.orchestration.policy.PolicyEvaluationRecorder;
+import com.agentic.urlshortener.orchestration.repository.DecisionRepository;
 import com.agentic.urlshortener.orchestration.repository.RequirementVersionRepository;
 import com.agentic.urlshortener.orchestration.repository.StageAttemptRepository;
 import com.agentic.urlshortener.orchestration.repository.StageNodeRepository;
@@ -79,13 +82,16 @@ public class RunCoordinator {
     private final ObjectProvider<ApplicationPlanePort> port;
     private final PermissionAudit permissionAudit;
     private final PolicyEvaluationRecorder policyRecorder;
+    private final DecisionRepository decisions;
     private final Set<UUID> stopping = ConcurrentHashMap.newKeySet();
 
     public RunCoordinator(WorkflowRunRepository runs, StageNodeRepository nodes, StageAttemptRepository attempts,
             RequirementVersionRepository requirements, ArtifactStore artifacts, ConditionEvaluator conditions,
             EntryExitCriteria criteria, AgentRegistry registry, StageDispatcher dispatcher, RunLocks locks, RunAudit audit,
             PlatformTransactionManager transactionManager, Clock clock, OrchestrationProperties properties,
-            ObjectProvider<ApplicationPlanePort> port, PermissionAudit permissionAudit, PolicyEvaluationRecorder policyRecorder) {
+            ObjectProvider<ApplicationPlanePort> port, PermissionAudit permissionAudit, PolicyEvaluationRecorder policyRecorder,
+            DecisionRepository decisions) {
+        this.decisions = decisions;
         this.policyRecorder = policyRecorder;
         this.runs = runs;
         this.nodes = nodes;
@@ -128,6 +134,41 @@ public class RunCoordinator {
         stopping.add(runId);
     }
 
+    /** Safe-stops a run that is not yet terminal (FR-REL-06); returns whether this call stopped it. */
+    public boolean safeStop(UUID runId, String reason) {
+        return Boolean.TRUE.equals(locks.withLock(runId, () -> tx.execute(status -> {
+            WorkflowRun run = runs.findById(runId).orElseThrow();
+            if (run.getStatus().isTerminal()) {
+                return false;
+            }
+            safeStop(run, nodes.findByRunIdOrderByStageKeyAsc(runId), reason, now());
+            return true;
+        })));
+    }
+
+    /**
+     * Escalates a gate whose decision deadline has passed (FR-GOV-07): the gate is never approved by
+     * default; the escalation is audited and the run safe-stops. No-op if the gate was decided meanwhile.
+     */
+    public boolean escalateExpiredGate(UUID runId, StageType gate) {
+        return Boolean.TRUE.equals(locks.withLock(runId, () -> tx.execute(status -> {
+            WorkflowRun run = runs.findById(runId).orElseThrow();
+            StageNode node = nodes.findByRunIdAndStageKey(runId, gate).orElseThrow();
+            Instant now = now();
+            if (run.getStatus().isTerminal() || node.getStatus() != StageStatus.AWAITING_DECISION
+                    || node.getDecisionDeadline() == null || !now.isAfter(node.getDecisionDeadline())) {
+                return false;
+            }
+            String role = node.getStageType().requiredRole() == null ? "approver" : node.getStageType().requiredRole().name();
+            String reason = "decision deadline " + node.getDecisionDeadline() + " passed for " + gate + " (awaiting "
+                    + node.getAwaiting() + "); escalated to " + role + ", not approved by default";
+            audit.system(runId, "GATE_ESCALATED", gate.name(), "ESCALATED", reason, Map.of("deadline",
+                    node.getDecisionDeadline().toString(), "awaiting", String.valueOf(node.getAwaiting()), "requiredRole", role));
+            safeStop(run, nodes.findByRunIdOrderByStageKeyAsc(runId), reason, now);
+            return true;
+        })));
+    }
+
     private List<Dispatch> schedule(UUID runId) {
         WorkflowRun run = runs.findById(runId).orElseThrow();
         if (run.getStatus().isTerminal() || run.getStatus() == RunStatus.PAUSED || run.getStatus() == RunStatus.COMPENSATING) {
@@ -138,6 +179,7 @@ public class RunCoordinator {
         plan.sort(PLAN_ORDER);
         Map<StageType, StageNode> byKey = new EnumMap<>(StageType.class);
         plan.forEach(n -> byKey.put(n.getStageKey(), n));
+        revalidateApprovals(runId, plan, byKey);
         RequirementVersion requirement = currentRequirement(run);
         long cycle = attempts.maxSchedulingCycle(runId) + 1;
         List<Dispatch> dispatches = new ArrayList<>();
@@ -165,6 +207,76 @@ public class RunCoordinator {
 
         deriveRunStatus(run, plan, now);
         return dispatches;
+    }
+
+    /**
+     * Re-validation guard (FR-GOV-05): an approved gate stays approved only while every artifact bound to
+     * its decision still has the approved fingerprint. Otherwise the decision is invalidated with the
+     * reason, and the gate and every stage downstream of it are re-opened as a new generation.
+     */
+    private void revalidateApprovals(UUID runId, List<StageNode> plan, Map<StageType, StageNode> byKey) {
+        Map<String, Artifact> current = null;
+        for (StageNode gate : plan) {
+            if (!gate.getStageType().isGate() || gate.getStatus() != StageStatus.SUCCEEDED) {
+                continue;
+            }
+            Optional<Decision> approval = decisions.findByRunIdAndStageKeyAndValidTrueOrderByCreatedAtDesc(runId, gate.getStageKey())
+                    .stream().filter(d -> "APPROVED".equals(d.getOutcome())).findFirst();
+            if (approval.isEmpty() || approval.get().getBoundFingerprints() == null) {
+                continue;
+            }
+            if (current == null) {
+                current = artifacts.current(runId);
+            }
+            Optional<String> change = boundChange(approval.get(), current);
+            if (change.isPresent()) {
+                approval.get().invalidate(change.get());
+                audit.system(runId, "DECISION_INVALIDATED", gate.getStageKey().name(), "INVALIDATED", change.get(),
+                        Map.of("decisionId", approval.get().getId().toString()));
+                reopenWithDependents(runId, gate, plan, "approval invalidated: " + change.get());
+            }
+        }
+    }
+
+    private static Optional<String> boundChange(Decision approval, Map<String, Artifact> current) {
+        List<String> changes = new ArrayList<>();
+        CanonicalJson.parse(approval.getBoundFingerprints()).properties().forEach(entry -> {
+            String approved = entry.getValue().asString();
+            Artifact now = current.get(entry.getKey());
+            if (now == null || !now.getFingerprint().equals(approved)) {
+                changes.add("bound artifact " + entry.getKey() + " changed from " + approved.substring(0, Math.min(12, approved.length()))
+                        + " to " + (now == null ? "absent" : now.getFingerprint().substring(0, 12)));
+            }
+        });
+        return changes.isEmpty() ? Optional.empty() : Optional.of(String.join("; ", changes));
+    }
+
+    /** Re-opens {@code origin} and all stages that transitively depend on it; their valid decisions are invalidated. */
+    private void reopenWithDependents(UUID runId, StageNode origin, List<StageNode> plan, String reason) {
+        Set<StageType> affected = EnumSet.of(origin.getStageKey());
+        boolean grew;
+        do {
+            grew = false;
+            for (StageNode node : plan) {
+                if (!affected.contains(node.getStageKey()) && node.getDependsOn().stream().anyMatch(affected::contains)) {
+                    affected.add(node.getStageKey());
+                    grew = true;
+                }
+            }
+        } while (grew);
+        for (StageNode node : plan) {
+            if (!affected.contains(node.getStageKey()) || node.getStatus() == StageStatus.PENDING) {
+                continue;
+            }
+            StageStatus from = node.getStatus();
+            if (node != origin && node.getStageType().isGate()) {
+                decisions.findByRunIdAndStageKeyAndValidTrueOrderByCreatedAtDesc(runId, node.getStageKey())
+                        .forEach(d -> d.invalidate("upstream approval " + origin.getStageKey() + " was invalidated"));
+            }
+            node.reopen();
+            audit.transition(runId, node.getStageKey().name(), from, StageStatus.PENDING,
+                    node == origin ? reason : "re-opened: upstream " + origin.getStageKey() + " re-opened");
+        }
     }
 
     private void resolvePending(UUID runId, StageNode node, Map<String, Artifact> current, Instant now) {

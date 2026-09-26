@@ -121,3 +121,28 @@ from the session's recorded tool output. No outcome in this table is reconstruct
 
 **Final green**: 16:59 `mvnw -B -ntp verify` (online) → 343 tests, 0 failures, 0 errors, SBOM
 generated (104 components), BUILD SUCCESS.
+
+## Phase 5 — US3 govern high-impact decisions (T059–T066)
+
+| Tasks | Test(s) | Red run (command → observed failure) | Green run (command → result) |
+|-------|---------|--------------------------------------|------------------------------|
+| T059–T063 | `SeparationOfDutiesTest` (3), `ApprovalBindingTest` (2), `GateDeadlineTest` (3), `ConcurrentGateDecisionTest` (1), `GateRejectionTest` (2), `WaitingGateIndependenceTest` (1) | 17:16 `mvnw test-compile` → compile error, `DeadlineSweeper` missing; an empty skeleton was added so that the red is behavioral. 17:17 `mvnw test -Dtest=SeparationOfDutiesTest,ApprovalBindingTest,GateDeadlineTest,ConcurrentGateDecisionTest,GateRejectionTest,WaitingGateIndependenceTest` → 12 tests, 8 failures: `Status expected:<403> but was:<200>` (requester approved own run), `expected:<409> but was:<200>` (late decision accepted), no invalidation on a changed DESIGN, both racers got a result other than `CONCURRENT_DECISION`, no escalation, IMPLEMENTATION not cancelled on rejection | 17:21 first run (with `GateDecisionBasicsTest`, `RunCoordinatorTest`, `WorkflowApiTest`) → 26/29: rejection never reached `REJECTED` (see note 1). 17:23 → 29/29 |
+| T065 | `ArchitectureTest` (+3 rules), `GovernanceSecurityMatrixTest` (34) — verification | — | 17:25 → 40/41: the new rule flagged `ComplianceEvaluationAgent` → `PolicySetLoader.current()`, a read of the pinned policy set (rule too broad, see note 2). 17:26 → 8/8 |
+
+**Verification, not TDD**: `WaitingGateIndependenceTest` passed in the red run. The scheduler has
+blocked only the dependents of a waiting gate since T041, so this test documents existing behavior.
+
+**Notes**
+
+1. **Defect found by `GateRejectionTest`**: `ShortLinkRepository.deleteBySyntheticRunId` is
+   `@Modifying(clearAutomatically = true)`. When compensation ran inside the rejection transaction,
+   the persistence context was flushed and cleared, and the later `REJECTED` change to the (now
+   detached) run was silently lost. Fix: re-load the run after compensation. The pitfall is
+   documented on `CompensationCoordinator.compensate`.
+2. **Rule correction**: the planned rule "agents must not depend on policy mutation" was first
+   written as "no dependency on `PolicySetLoader`". That class has only `current()`. The rule became
+   two rules: agents cannot reach governance, security, or network classes; and `PolicySetLoader`
+   exposes no public mutators.
+
+**Final green**: 17:27 `mvnw -B -ntp verify` (online) → 392 tests, 0 failures, 0 errors, SBOM
+generated, BUILD SUCCESS.

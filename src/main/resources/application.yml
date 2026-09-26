@@ -67,6 +67,7 @@ app:
     codebase-root: .
     audit-retention-days: 365
     gate-deadline: PT24H
+    deadline-sweep-interval: PT5S
     max-clarification-rounds: 3
     stage-executor-threads: 8
     autonomy:

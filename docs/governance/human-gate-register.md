@@ -289,3 +289,4 @@ and decides whether redirects may be cached.
 | Phase 3 implementation deviations (b)–(g) and the audit-trail concurrency fix (`task-group-checkpoints.md`, Phase 3 row 11) | Phase 3 checkpoint | pending review |
 | State-model refinement: stage transition `PENDING → FAILED` for an unmet entry criterion. Implemented and tested in `StageTransitions`, not yet in the `data-model.md` stage diagram | Phase 4 checkpoint | pending: approve (then update `data-model.md`) or reject (then remove the transition) |
 | Phase 4 implementation deviations (a)–(e) (`task-group-checkpoints.md`, Phase 4 row 11), including per-run serialization of parallel probe sections (`SyntheticScope`) under ADR-010 | Phase 4 checkpoint | pending review |
+| Phase 5 deviations (a)–(e) (`task-group-checkpoints.md`, Phase 5 row 11), including re-opening downstream stages when an approval is invalidated | Phase 5 checkpoint | pending review |

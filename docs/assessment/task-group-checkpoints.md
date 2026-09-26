@@ -178,3 +178,36 @@ security rules unchanged (deny-by-default; redirect route public by design); all
   `DEADLINE_PASSED`, `CONCURRENT_DECISION`) are now used.
 - The anti-bypass rules are executable.
 - All tests are green.
+
+---
+
+## Checkpoint: Phase 6 — US4 reliability, readiness, and drills (T067–T082; T074 deferred)
+
+| # | Item | Record |
+|---|------|--------|
+| 1 | Completed tasks | T067–T073, T075–T082. T074 (autonomy budget) is deferred by SD-1 |
+| 2 | Requirements addressed | FR-REL-01..11, FR-POL-03, FR-POL-04, FR-POL-06, FR-RDY-01..04, FR-ORC-08, FR-ORC-17, NFR-REL-02, NFR-REL-03, NFR-RCV-01, SC-002, SC-007 |
+| 3 | ADRs followed | ADR-009 (retry, fallback, safe-stop), ADR-010 (rollback versus compensation), ADR-006 (persisted state, recovery), ADR-019 (policy exceptions, readiness), ADR-014 (fault injection only in demo and test profiles) |
+| 4 | Files created or changed | **new:** `reliability/{RetryPolicy, StagePolicyProperties, FailureClassifier, FailureEventRecorder, FaultInjector, SafeStopService, RecoveryService}` (`CompensationCoordinator` extended); `agent/{TemplateDocumentationAgent, MinimalSummaryAgent, TransientStageException, PermanentStageException}`; `policy/PolicyExceptionService`; `controller/OperationsController`; `service/OperationsService`; `domain/FaultPlan`; `dto/{OperatorActionRequest, PolicyExceptionRequest, PolicyExceptionView}`. **changed:** `engine/{RunCoordinator, StageDispatcher, Dispatch}`, `StageResult.TimedOut`, `ReleaseAgent` (conflict-aware rollback), `DocumentationAgent` (shared repository check), `PolicyEngine`/`PolicyContext`/`RepositoryRunFacts` (simulated policy failures), `GateService` (release readiness re-check), `GovernanceController` (exception endpoints), `WorkflowService` (fault validation), `CapabilityState` (`changedByRun`), `CapabilityService`, `InProcessApplicationPlaneAdapter`, repositories, `application.yml` (stage policies, query timeout). **tests:** 12 new test classes, `support/{HttpDriver}`, `ScriptedAgent` (registers production fallbacks). **docs:** `docs/architecture/reliability.md`, `docs/operations/runbook.md`, `docs/scenarios/drills.md`, `docs/governance/policy-set.md`; orchestration and SCN-A docs updated |
+| 5 | Tests written before implementation | T067–T078 (red recorded; two red runs were compile-level); T079, T080 are verification |
+| 6 | Expected initial failures | no retry, fallback, recovery, faults, or exception endpoints |
+| 7 | Validation commands executed | see `tdd-evidence.md` Phase 6; `mvnw -B -ntp verify` twice (1 test defect, then green) |
+| 8 | Actual outcomes | 444 tests, 0 failures, SBOM generated, BUILD SUCCESS; drills RDR-01..RDR-07 green |
+| 9 | Documentation updated | see row 4 |
+| 10 | Traceability updated | tests tagged FR-REL-*, FR-POL-*, FR-RDY-*, RDR-*; tasks marked |
+| 11 | Deviations from plan | (a) **Safe-stop decision:** safe-stop records one `SAFE_STOP` decision whose payload lists every compensation action; each action is audited separately. T070 asked for a decision per action, and no per-action decision type exists in the data model. (b) **Fallback attempt limit:** a fallback attempt may follow exhausted retries, so a stage runs at most `max-attempts + 1` times. (c) **Rollback of a previously released capability:** compensation cannot restore one, because `release-record.schema.json` has no previous parameters. This is reported as a `FAILED` action requiring manual intervention; the contract schema was not changed. (d) **Autonomy budget:** the `SafeStopServiceTest` triggers cover stage failure, deadline, operator request, compensation failure, and policy-exception rejection (in `PolicyExceptionFlowTest`). The autonomy budget trigger is deferred (T074); clarification rounds are Phase 8. (e) **Stage policies:** the properties use `defaults` and `overrides` (a component cannot be named `default`). (f) **Fault stage validation:** faults are validated against their stage (for example, `VERIFICATION_FAILURE` applies only to probe stages). (g) **Dispatcher shutdown:** the dispatcher drops results during shutdown, so an interrupted attempt stays open for recovery, as after a process kill |
+| 12 | New risks | wake-ups, locks, and the probe mutex are in-process (single-process H2, BL-02); compensation fault occurrences are counted in memory |
+| 13 | New assumptions | a fallback runs at most once per stage generation |
+| 14 | Remaining failures | none |
+| 15 | Commit boundary | Phase 6 |
+| 16 | Commit message | `feat(reliability): add retry, fallback, compensation, safe-stop, recovery, and policy exceptions` |
+| 17 | Next task group | Phase 7 US5 — SCN-B brownfield (T083–T090) |
+| 18 | Human approval required | deviations (a)–(g) for the candidate's review; the CP2 scope record confirms that SD-1 continues |
+
+**Pre-commit review**:
+- **Scope.** One coherent capability, run reliability. The shortener changes are limited to exposing
+  `changedByRun` through the port.
+- **No contract change.** The new endpoints (pause, resume, safe-stop, policy exceptions) were
+  already in `openapi.yaml` and are validated by the contract harness in tests.
+- **Fault injection stays off by default.** A test proves the default profile refuses faults.
+- **Tests.** All tests are green.

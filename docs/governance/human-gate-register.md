@@ -290,3 +290,5 @@ and decides whether redirects may be cached.
 | State-model refinement: stage transition `PENDING → FAILED` for an unmet entry criterion. Implemented and tested in `StageTransitions`, not yet in the `data-model.md` stage diagram | Phase 4 checkpoint | pending: approve (then update `data-model.md`) or reject (then remove the transition) |
 | Phase 4 implementation deviations (a)–(e) (`task-group-checkpoints.md`, Phase 4 row 11), including per-run serialization of parallel probe sections (`SyntheticScope`) under ADR-010 | Phase 4 checkpoint | pending review |
 | Phase 5 deviations (a)–(e) (`task-group-checkpoints.md`, Phase 5 row 11), including re-opening downstream stages when an approval is invalidated | Phase 5 checkpoint | pending review |
+| Phase 6 deviations (a)–(g) (`task-group-checkpoints.md`, Phase 6 row 11), including the limitation that a capability released before a run cannot be rolled back automatically | Phase 6 checkpoint | pending review |
+| CP2 scope record (`timebox-and-scope.md`): SD-1 deferrals T074 and T096 continue | CP2 | pending confirmation at G6 |

@@ -146,3 +146,43 @@ blocked only the dependents of a waiting gate since T041, so this test documents
 
 **Final green**: 17:27 `mvnw -B -ntp verify` (online) → 392 tests, 0 failures, 0 errors, SBOM
 generated, BUILD SUCCESS.
+
+## Phase 6 — US4 reliability, readiness, and drills (T067–T082; T074 deferred by SD-1)
+
+| Tasks | Test(s) | Red run (command → observed failure) | Green run (command → result) |
+|-------|---------|--------------------------------------|------------------------------|
+| T067–T068 | `RetryPolicyTest` (3), `FailureClassifierTest` (3), `StageRetryTimeoutTest` (5) | 17:33 `mvnw test-compile` → exit 1, missing `RetryPolicy`, `StagePolicyProperties`, `FailureClassifier`, `TransientStageException`, `PermanentStageException` | 17:37 `-Dtest=RetryPolicyTest,FailureClassifierTest,StageRetryTimeoutTest,RunCoordinatorTest,GateDecisionBasicsTest` → 23/23 |
+| T069 | `FallbackTest` (5) | 17:39 → 5 tests, 1 failure, 3 errors: no fallback agent registered, the stage failed instead of degrading (`aVerificationStageNeverDegrades` already passed) | 17:42 `-Dtest=FallbackTest,DocumentationAgentTest,AgentPermissionTest` → 10/10 |
+| T070–T072 | `CompensationCoordinatorTest` (4), `SafeStopServiceTest` (4), `OperationsControllerTest` (4) | 17:47 `mvnw test-compile` → compile error, `SafeStopService` missing | 17:48 → 26/27 (see note 1); 17:50 → 4/4 |
+| T070, T073, T075 | `ReleaseAgentTest` (+1), `ReleaseRollbackTest` (1), `RestartResumeTest` (1), `FaultInjectionTest` (5) | 17:54 `-Dtest=FaultInjectionTest,RestartResumeTest,ReleaseRollbackTest,ReleaseAgentTest` → 11 tests, 6 failures, 1 error: faults not applied, no validation (`expected:<400> but was:<201>`), no recovery, rollback conflict not recorded | 17:58 → 4 errors (see note 2); 18:01 → 1 error (see note 3); 18:02 `-Dtest=RestartResumeTest` → 1/1 |
+| T076–T078 | `PolicyExceptionFlowTest` (5), `ReadinessEvaluatorTest` (4) | 18:05 → 9 tests, 4 failures: `Status expected:<201> but was:<404>` (no exception endpoints) | 18:07 (with `GateDecisionBasicsTest`, `SeparationOfDutiesTest`) → 18/18 |
+| T079 | `PolicySetCoverageTest` (1) — verification | — | 18:11 → 1/1 |
+| T080 | `ReliabilityDrillsE2ETest` (6) — verification | — | 18:11 → 6/6 (evidence under `target/evidence/drills/`) |
+
+**Verification, not TDD**: in the red runs, `ReadinessEvaluatorTest` (4) and
+`PolicyExceptionFlowTest.anUnansweredExceptionDeadlineSafeStopsTheRun` passed. The readiness matrix
+exists since T052, and the deadline sweeper (T064) covers every awaiting stage. These tests document
+existing behavior.
+
+**Notes**
+
+1. **Test defect**: `CompensationCoordinatorTest` simulated "another run changed the flag" by
+   setting the same value again. `CapabilityService.setRelease` is a set, not a toggle, and records
+   no change for an unchanged value, so the flag's owner did not change. The test now has the other
+   run withdraw and re-release. Product code is unchanged; the idempotent set is the intended
+   behavior (plan §6).
+2. **Defect found**: `FailureEventRecorder` stored the free-text failure reason in
+   `failure_event.cause VARCHAR(40)`, but data-model.md defines `cause` as a code (`AGENT_ERROR`,
+   `TIMEOUT`, `PROCESS_INTERRUPTION`, `VERIFICATION_FAILURE`, `COMPENSATION_ERROR`). Long reasons
+   failed the insert, which rolled back the attempt's result, so runs stalled. Fixed by deriving the
+   code (`FailureEventRecorder.causeOf`). The earlier green runs had passed only because their
+   reasons happened to be short.
+3. **Test defect**: `RestartResumeTest` passed the file datasource through
+   `SpringApplicationBuilder.properties()`, which are default properties and lose to the `test`
+   profile. The two contexts used different in-memory databases. They are now command-line arguments.
+4. **Full suite, 18:14**: `mvnw verify` → 1 error. `ReleaseRollbackTest` filtered the shared global
+   audit chain by `getDetails().contains(..)`, and events from other tests in that chain have no
+   details. The filter is now null-safe.
+
+**Final green**: 18:16 `mvnw -B -ntp verify` (online) → 444 tests, 0 failures, 0 errors, SBOM
+generated, BUILD SUCCESS.

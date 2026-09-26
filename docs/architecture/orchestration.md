@@ -129,7 +129,7 @@ cycle, and `VALIDATION` waits for all of them.
 links, which are cleaned up by run (ADR-010). Their probe-and-cleanup sections therefore run under
 a per-run mutex (`SyntheticScope`). Dispatch and the rest of each stage remain concurrent.
 
-**Not yet implemented in this phase:** retry with backoff, timeouts, fallback agents (Phase 6,
-T067–T068, ADR-009), safe-stop, and compensation drills (Phase 6), re-planning on change requests
-(Phase 7). The state machines already include those states so that later phases add behavior
-without changing the model.
+**Reliability** (retry with backoff, timeouts, fallback, compensation, safe-stop, operator controls,
+recovery after restart, fault injection) is described in [reliability.md](reliability.md).
+**Re-planning** on change requests and clarifications arrives with Phases 7–8. The state machines
+already include those states, so later phases add behavior without changing the model.

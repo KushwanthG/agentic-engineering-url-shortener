@@ -12,6 +12,7 @@ import com.agentic.urlshortener.orchestration.audit.AuditService;
 import com.agentic.urlshortener.orchestration.audit.AuditVerification;
 import com.agentic.urlshortener.orchestration.config.OrchestrationProperties;
 import com.agentic.urlshortener.orchestration.domain.Decision;
+import com.agentic.urlshortener.orchestration.domain.FaultPlan;
 import com.agentic.urlshortener.orchestration.domain.PolicyExceptionRecord;
 import com.agentic.urlshortener.orchestration.domain.WorkflowRun;
 import com.agentic.urlshortener.orchestration.repository.DecisionRepository;
@@ -49,6 +50,7 @@ public class RepositoryRunFacts implements RunFacts {
                 .auditRetentionDays(properties.auditRetentionDays())
                 .attempts(run.getAttemptsUsed(), properties.autonomy().maxAttempts())
                 .sbom(SbomReader.read().orElse(null));
+        FaultPlan.parse(run.getFaultPlan()).simulatedPolicyFailures().forEach(builder::simulatedPolicyFailure);
         for (Decision decision : decisions.findByRunIdOrderByCreatedAtAsc(runId)) {
             if (decision.getStageKey() != null) {
                 Map<String, String> bound = decision.getBoundFingerprints() == null ? Map.of()

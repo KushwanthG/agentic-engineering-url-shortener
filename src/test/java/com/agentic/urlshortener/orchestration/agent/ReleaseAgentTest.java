@@ -88,8 +88,48 @@ class ReleaseAgentTest {
     }
 
     @Test
+    @Tag("FR-REL-10")
+    void theRollbackIsSkippedWithARecordedConflictWhenAnotherRunChangedTheFlag() {
+        UUID otherRun = UUID.randomUUID();
+        AgentChain chain = designed().withPort(new ConcurrentChange(new BrokenRedirects(port), port, otherRun));
+        StageResult result = chain.run(agent);
+
+        assertThat(result).isInstanceOfSatisfying(StageResult.Failed.class, f -> assertThat(f.reason())
+                .contains("post-release verification failed").contains("rollback skipped").contains(otherRun.toString()));
+        assertThat(port.capability("custom-alias").released()).isTrue();
+        assertThat(port.capability("custom-alias").changedByRun()).isEqualTo(otherRun);
+    }
+
+    @Test
     void onlyTheReleaseAgentMayChangeReleaseState() {
         assertThat(agent.permissions()).contains(AgentPermission.CHANGE_CAPABILITY_RELEASE);
+    }
+
+    /**
+     * Verification fails (through {@code broken}) after another run has withdrawn and re-released the
+     * capability, so the flag no longer holds the value this run set.
+     */
+    private record ConcurrentChange(ApplicationPlanePort broken, ApplicationPlanePort real, UUID otherRun)
+            implements ApplicationPlanePort {
+        @Override public Optional<LinkSnapshot> findLink(String code) { return broken.findLink(code); }
+        @Override public ProbeResponse resolve(String code) {
+            real.setRelease("custom-alias", false, Map.of(), otherRun, "test: another run withdrew the capability");
+            real.setRelease("custom-alias", true, Map.of(), otherRun, "test: another run re-released it");
+            return broken.resolve(code);
+        }
+        @Override public ProbeResponse createSyntheticLink(UUID runId, SyntheticLinkSpec spec) { return broken.createSyntheticLink(runId, spec); }
+        @Override public int deleteSyntheticLinks(UUID runId) { return broken.deleteSyntheticLinks(runId); }
+        @Override public CapabilityState capability(String capabilityId) { return broken.capability(capabilityId); }
+        @Override public DeliveryStatus deliveryStatus(String capabilityId, String migration, List<String> fields) {
+            return broken.deliveryStatus(capabilityId, migration, fields);
+        }
+        @Override public <T> T withPreview(String capabilityId, Map<String, Object> parameters, Supplier<T> action) {
+            return broken.withPreview(capabilityId, parameters, action);
+        }
+        @Override public CapabilityState setRelease(String capabilityId, boolean released, Map<String, Object> parameters, UUID runId,
+                String reason) {
+            return broken.setRelease(capabilityId, released, parameters, runId, reason);
+        }
     }
 
     /** The real port, except that every resolution is reported as not found (simulated verification failure). */

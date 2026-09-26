@@ -19,6 +19,8 @@ spring:
       hibernate:
         jdbc:
           time_zone: UTC
+      # Review RC-6: no statement (agents reach the store through the port) can block an attempt forever.
+      jakarta.persistence.query.timeout: 15000
   flyway:
     locations: classpath:db/migration
 
@@ -70,6 +72,13 @@ app:
     deadline-sweep-interval: PT5S
     max-clarification-rounds: 3
     stage-executor-threads: 8
+    stages:
+      # PVT-11 and PVT-12; per-stage values go under overrides.<STAGE_TYPE>.
+      defaults:
+        max-attempts: 3
+        timeout: PT30S
+        initial-backoff: PT0.2S
+        max-backoff: PT5S
     autonomy:
       max-attempts: 60
       max-processing-time: PT10M

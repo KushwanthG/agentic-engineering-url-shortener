@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -17,6 +18,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -33,9 +35,12 @@ import com.agentic.urlshortener.orchestration.agent.StageResult;
 import com.agentic.urlshortener.orchestration.config.OrchestrationProperties;
 import com.agentic.urlshortener.orchestration.domain.Artifact;
 import com.agentic.urlshortener.orchestration.domain.AttemptOutcome;
+import com.agentic.urlshortener.orchestration.domain.ActorType;
 import com.agentic.urlshortener.orchestration.domain.AwaitingType;
 import com.agentic.urlshortener.orchestration.domain.Decision;
+import com.agentic.urlshortener.orchestration.domain.DecisionType;
 import com.agentic.urlshortener.orchestration.domain.FailureClass;
+import com.agentic.urlshortener.orchestration.domain.FaultPlan;
 import com.agentic.urlshortener.orchestration.domain.RequirementVersion;
 import com.agentic.urlshortener.orchestration.domain.RunStatus;
 import com.agentic.urlshortener.orchestration.domain.StageAttempt;
@@ -46,6 +51,11 @@ import com.agentic.urlshortener.orchestration.domain.WorkflowRun;
 import com.agentic.urlshortener.orchestration.port.ApplicationPlanePort;
 import com.agentic.urlshortener.orchestration.port.DeferredApplicationPlanePort;
 import com.agentic.urlshortener.orchestration.port.PermissionScopedPort;
+import com.agentic.urlshortener.orchestration.reliability.CompensationCoordinator;
+import com.agentic.urlshortener.orchestration.reliability.FailureEventRecorder;
+import com.agentic.urlshortener.orchestration.reliability.FaultInjector;
+import com.agentic.urlshortener.orchestration.reliability.RetryPolicy;
+import com.agentic.urlshortener.orchestration.reliability.StagePolicyProperties;
 import com.agentic.urlshortener.orchestration.policy.PolicyEvaluationRecorder;
 import com.agentic.urlshortener.orchestration.repository.DecisionRepository;
 import com.agentic.urlshortener.orchestration.repository.RequirementVersionRepository;
@@ -83,6 +93,11 @@ public class RunCoordinator {
     private final PermissionAudit permissionAudit;
     private final PolicyEvaluationRecorder policyRecorder;
     private final DecisionRepository decisions;
+    private final StagePolicyProperties stagePolicies;
+    private final FailureEventRecorder failureEvents;
+    private final TaskScheduler scheduler;
+    private final CompensationCoordinator compensations;
+    private final FaultInjector faults;
     private final Set<UUID> stopping = ConcurrentHashMap.newKeySet();
 
     public RunCoordinator(WorkflowRunRepository runs, StageNodeRepository nodes, StageAttemptRepository attempts,
@@ -90,7 +105,13 @@ public class RunCoordinator {
             EntryExitCriteria criteria, AgentRegistry registry, StageDispatcher dispatcher, RunLocks locks, RunAudit audit,
             PlatformTransactionManager transactionManager, Clock clock, OrchestrationProperties properties,
             ObjectProvider<ApplicationPlanePort> port, PermissionAudit permissionAudit, PolicyEvaluationRecorder policyRecorder,
-            DecisionRepository decisions) {
+            DecisionRepository decisions, StagePolicyProperties stagePolicies, FailureEventRecorder failureEvents,
+            TaskScheduler scheduler, CompensationCoordinator compensations, FaultInjector faults) {
+        this.faults = faults;
+        this.compensations = compensations;
+        this.stagePolicies = stagePolicies;
+        this.failureEvents = failureEvents;
+        this.scheduler = scheduler;
         this.decisions = decisions;
         this.policyRecorder = policyRecorder;
         this.runs = runs;
@@ -113,10 +134,28 @@ public class RunCoordinator {
 
     /** Schedules everything that can progress, persists it, then dispatches the new attempts. */
     public void advance(UUID runId) {
-        List<Dispatch> dispatches = locks.withLock(runId, () -> tx.execute(status -> schedule(runId)));
-        for (Dispatch dispatch : dispatches) {
-            dispatcher.submit(dispatch, result -> onAttemptFinished(dispatch, result));
+        Scheduled scheduled = locks.withLock(runId, () -> tx.execute(status -> schedule(runId)));
+        for (Dispatch dispatch : scheduled.dispatches()) {
+            dispatcher.submit(dispatch, result -> onAttemptFinished(dispatch, result), late -> onLateResult(dispatch, late));
         }
+        if (scheduled.wakeUpAt() != null) {
+            scheduler.schedule(() -> advance(runId), scheduled.wakeUpAt());
+        }
+    }
+
+    /** What one scheduling cycle produced: attempts to dispatch, and when the earliest waiting retry is due. */
+    private record Scheduled(List<Dispatch> dispatches, Instant wakeUpAt) {
+    }
+
+    /** A result that arrived after its attempt timed out: recorded, never applied (FR-REL-09). */
+    public void onLateResult(Dispatch dispatch, StageResult result) {
+        UUID runId = dispatch.context().runId();
+        locks.withLock(runId, () -> tx.execute(status -> {
+            audit.system(runId, "ATTEMPT_DISCARDED", dispatch.context().stageType().name(), "DISCARDED",
+                    "late " + result.getClass().getSimpleName() + " result of attempt " + dispatch.attemptNo() + " after timeout",
+                    Map.of("attemptNo", dispatch.attemptNo(), "generation", dispatch.generation()));
+            return null;
+        }));
     }
 
     /** Applies an attempt's result under the run lock (stale or duplicate results are discarded), then advances. */
@@ -134,16 +173,52 @@ public class RunCoordinator {
         stopping.add(runId);
     }
 
-    /** Safe-stops a run that is not yet terminal (FR-REL-06); returns whether this call stopped it. */
-    public boolean safeStop(UUID runId, String reason) {
+    /**
+     * Safe-stops a run that is not yet terminal (FR-REL-06) for {@code trigger}; returns whether this call
+     * stopped it (false when the run was already terminal: exactly one terminal outcome per run).
+     */
+    public boolean safeStop(UUID runId, String trigger, String reason, ActorType actorType, String actorId) {
         return Boolean.TRUE.equals(locks.withLock(runId, () -> tx.execute(status -> {
             WorkflowRun run = runs.findById(runId).orElseThrow();
             if (run.getStatus().isTerminal()) {
                 return false;
             }
-            safeStop(run, nodes.findByRunIdOrderByStageKeyAsc(runId), reason, now());
+            safeStop(runId, trigger, reason, actorType, actorId, now());
             return true;
         })));
+    }
+
+    /**
+     * Recovery after a restart (FR-REL-08, plan.md §6 "Resumption"): attempts still open when the process
+     * stopped become {@code INTERRUPTED}, a transient failure with cause {@code PROCESS_INTERRUPTION} that
+     * counts toward the stage's attempts and follows the normal retry path; completed stages are never
+     * repeated. Returns the number of attempts interrupted.
+     */
+    public int recoverInterrupted(UUID runId) {
+        Integer interrupted = locks.withLock(runId, () -> tx.execute(status -> {
+            WorkflowRun run = runs.findById(runId).orElseThrow();
+            if (run.getStatus().isTerminal()) {
+                return 0;
+            }
+            Instant now = now();
+            int count = 0;
+            for (StageAttempt attempt : attempts.findByRunIdAndFinishedAtIsNull(runId)) {
+                StageNode node = nodes.findByRunIdAndStageKey(runId, attempt.getStageKey()).orElseThrow();
+                if (node.getStatus() == StageStatus.RUNNING && node.getGeneration() == attempt.getGeneration()
+                        && node.getAttempts() == attempt.getAttemptNo()) {
+                    failAttempt(run, node, attempt, FailureClass.TRANSIENT, AttemptOutcome.INTERRUPTED,
+                            FailureEventRecorder.PROCESS_INTERRUPTION + ": the process stopped during this attempt", now);
+                } else {
+                    attempt.finish(AttemptOutcome.DISCARDED, null, "stale unfinished attempt found at recovery", now);
+                }
+                count++;
+            }
+            if (count > 0) {
+                audit.system(runId, "RUN_RECOVERED", "RUN", "OK", count + " interrupted attempt(s) returned to the retry path", null);
+            }
+            return count;
+        }));
+        return interrupted == null ? 0 : interrupted;
     }
 
     /**
@@ -164,15 +239,15 @@ public class RunCoordinator {
                     + node.getAwaiting() + "); escalated to " + role + ", not approved by default";
             audit.system(runId, "GATE_ESCALATED", gate.name(), "ESCALATED", reason, Map.of("deadline",
                     node.getDecisionDeadline().toString(), "awaiting", String.valueOf(node.getAwaiting()), "requiredRole", role));
-            safeStop(run, nodes.findByRunIdOrderByStageKeyAsc(runId), reason, now);
+            safeStop(runId, "GATE_DEADLINE", reason, ActorType.SYSTEM, RunAudit.SYSTEM, now);
             return true;
         })));
     }
 
-    private List<Dispatch> schedule(UUID runId) {
+    private Scheduled schedule(UUID runId) {
         WorkflowRun run = runs.findById(runId).orElseThrow();
         if (run.getStatus().isTerminal() || run.getStatus() == RunStatus.PAUSED || run.getStatus() == RunStatus.COMPENSATING) {
-            return List.of();
+            return new Scheduled(List.of(), null);
         }
         Instant now = now();
         List<StageNode> plan = new ArrayList<>(nodes.findByRunIdOrderByStageKeyAsc(runId));
@@ -195,7 +270,8 @@ public class RunCoordinator {
                 }
             }
             for (StageNode node : plan) {
-                if (node.getStatus() == StageStatus.READY) {
+                boolean retryDue = node.getStatus() == StageStatus.RETRY_WAIT && !node.getNextAttemptAt().isAfter(now);
+                if (node.getStatus() == StageStatus.READY || retryDue) {
                     Dispatch dispatch = start(run, node, requirement, cycle, now);
                     if (dispatch != null) {
                         dispatches.add(dispatch);
@@ -205,8 +281,13 @@ public class RunCoordinator {
             }
         } while (changed);
 
-        deriveRunStatus(run, plan, now);
-        return dispatches;
+        if (deriveRunStatus(run, plan, now)) {
+            return new Scheduled(List.of(), null);
+        }
+        Instant wakeUpAt = plan.stream()
+                .filter(n -> n.getStatus() == StageStatus.RETRY_WAIT).map(StageNode::getNextAttemptAt)
+                .min(Comparator.naturalOrder()).orElse(null);
+        return new Scheduled(dispatches, wakeUpAt);
     }
 
     /**
@@ -273,6 +354,7 @@ public class RunCoordinator {
                 decisions.findByRunIdAndStageKeyAndValidTrueOrderByCreatedAtDesc(runId, node.getStageKey())
                         .forEach(d -> d.invalidate("upstream approval " + origin.getStageKey() + " was invalidated"));
             }
+            failureEvents.generationInvalidated(runId, node.getStageKey(), node.getGeneration(), reason);
             node.reopen();
             audit.transition(runId, node.getStageKey().name(), from, StageStatus.PENDING,
                     node == origin ? reason : "re-opened: upstream " + origin.getStageKey() + " re-opened");
@@ -308,26 +390,37 @@ public class RunCoordinator {
                     "waiting for a " + type.requiredRole() + " decision until " + deadline);
             return null;
         }
-        Optional<StageAgent> primary = registry.primary(type);
+        boolean fallback = node.isDegraded();
+        Optional<StageAgent> selected = fallback ? registry.fallback(type) : registry.primary(type);
         Map<String, ArtifactInput> inputs = artifacts.inputsFor(runId, type);
-        String agentId = primary.map(StageAgent::agentId).orElse("none");
+        String agentId = selected.map(StageAgent::agentId).orElse("none");
         String fingerprint = inputFingerprint(requirement, inputs, agentId);
+        StageStatus from = node.getStatus();
+        boolean recovering = node.getAttempts() > 0;
+        Optional<FaultPlan.Fault> fault = run.getFaultPlan() == null ? Optional.empty()
+                : faults.faultFor(run.getFaultPlan(), type, attempts.findByRunIdOrderByStartedAtAsc(runId));
         int attemptNo = node.startAttempt(now, fingerprint);
-        attempts.save(StageAttempt.start(runId, type, node.getGeneration(), attemptNo, agentId, false, null, cycle, now, fingerprint));
+        attempts.save(StageAttempt.start(runId, type, node.getGeneration(), attemptNo, agentId, fallback,
+                fault.map(FaultPlan.Fault::type).orElse(null), cycle, now, fingerprint));
         run.countAttempt();
-        audit.transition(runId, type.name(), StageStatus.READY, StageStatus.RUNNING, "dispatched to " + agentId);
+        if (recovering) {
+            failureEvents.recoveryStarted(runId, type, node.getGeneration(),
+                    fallback ? FailureEventRecorder.FALLBACK : FailureEventRecorder.RETRY, now);
+        }
+        audit.transition(runId, type.name(), from, StageStatus.RUNNING, "dispatched to " + agentId);
         audit.system(runId, "ATTEMPT_STARTED", type.name(), "OK", null, Map.of("attemptNo", attemptNo,
-                "generation", node.getGeneration(), "agentId", agentId, "schedulingCycle", cycle));
-        if (primary.isEmpty()) {
+                "generation", node.getGeneration(), "agentId", agentId, "schedulingCycle", cycle, "fallback", fallback));
+        if (selected.isEmpty()) {
             failAttempt(run, node, attemptFor(runId, type, node.getGeneration(), attemptNo), FailureClass.PERMANENT,
-                    "no agent is registered for " + type, now);
+                    AttemptOutcome.FAILED_PERMANENT, "no agent is registered for " + type, now);
             return null;
         }
-        StageAgent agent = primary.get();
+        StageAgent agent = selected.get();
         StageContext context = new StageContext(runId, type, node.getGeneration(), attemptNo, requirement.getVersion(),
                 requirement.getContent(), inputs, run.getPolicySetVersion(), scopedPort(runId, type, agent),
                 () -> stopping.contains(runId));
-        return new Dispatch(agent, context, node.getGeneration(), attemptNo, cycle);
+        StageAgent effective = fault.map(f -> faults.inject(agent, f)).orElse(agent);
+        return new Dispatch(effective, context, node.getGeneration(), attemptNo, cycle, stagePolicies.policyFor(type).timeout());
     }
 
     private void apply(Dispatch dispatch, StageResult result) {
@@ -354,7 +447,7 @@ public class RunCoordinator {
             case StageResult.Succeeded succeeded -> {
                 Optional<String> unmet = criteria.exit(type, succeeded.artifacts());
                 if (unmet.isPresent()) {
-                    failAttempt(run, node, attempt, FailureClass.PERMANENT, unmet.get(), now);
+                    failAttempt(run, node, attempt, FailureClass.PERMANENT, AttemptOutcome.FAILED_PERMANENT, unmet.get(), now);
                     return;
                 }
                 artifacts.store(runId, type, dispatch.generation(), dispatch.attemptNo(), dispatch.agent().agentId(),
@@ -362,12 +455,18 @@ public class RunCoordinator {
                 recordPolicies(runId, type, dispatch, succeeded.artifacts(), now);
                 attempt.finish(AttemptOutcome.SUCCEEDED, null, null, now);
                 node.succeed(now);
+                failureEvents.stageSucceeded(runId, type, dispatch.generation(), now);
                 audit.system(runId, "ATTEMPT_FINISHED", type.name(), "SUCCEEDED", succeeded.notes(),
                         Map.of("attemptNo", dispatch.attemptNo(), "generation", dispatch.generation()));
-                audit.transition(runId, type.name(), StageStatus.RUNNING, StageStatus.SUCCEEDED, "exit criteria met");
+                audit.transition(runId, type.name(), StageStatus.RUNNING, StageStatus.SUCCEEDED,
+                        node.isDegraded() ? "exit criteria met by the fallback agent (degraded)" : "exit criteria met");
                 afterSuccess(run, type);
             }
-            case StageResult.Failed failed -> failAttempt(run, node, attempt, failed.failureClass(), failed.reason(), now);
+            case StageResult.Failed failed -> failAttempt(run, node, attempt, failed.failureClass(),
+                    failed.failureClass() == FailureClass.TRANSIENT ? AttemptOutcome.FAILED_TRANSIENT : AttemptOutcome.FAILED_PERMANENT,
+                    failed.reason(), now);
+            case StageResult.TimedOut timedOut -> failAttempt(run, node, attempt, FailureClass.TRANSIENT, AttemptOutcome.TIMED_OUT,
+                    "attempt timed out after " + timedOut.timeout(), now);
             case StageResult.NeedsClarification clarification -> {
                 artifacts.store(runId, type, dispatch.generation(), dispatch.attemptNo(), dispatch.agent().agentId(),
                         List.of(clarification.clarificationRequest()), context.inputs(), now);
@@ -388,15 +487,52 @@ public class RunCoordinator {
         }
     }
 
-    private void failAttempt(WorkflowRun run, StageNode node, StageAttempt attempt, FailureClass failureClass, String reason,
-            Instant now) {
-        String key = node.getStageKey().name();
-        attempt.finish(failureClass == FailureClass.TRANSIENT ? AttemptOutcome.FAILED_TRANSIENT : AttemptOutcome.FAILED_PERMANENT,
-                failureClass, reason, now);
-        audit.system(run.getId(), "ATTEMPT_FAILED", key, failureClass.name(), reason, Map.of("attemptNo", attempt.getAttemptNo(),
-                "generation", attempt.getGeneration()));
-        node.fail(failureClass, reason, now);
-        audit.transition(run.getId(), key, StageStatus.RUNNING, StageStatus.FAILED, reason);
+    /**
+     * A failed attempt (plan.md §6): a transient failure is retried after backoff while attempts remain;
+     * a permanent failure or exhausted retries switch to the stage's fallback agent once, if it has one
+     * (verification stages have none), recorded as a {@code FALLBACK_USED} decision; otherwise the stage
+     * fails, which safe-stops the run.
+     */
+    private void failAttempt(WorkflowRun run, StageNode node, StageAttempt attempt, FailureClass failureClass, AttemptOutcome outcome,
+            String reason, Instant now) {
+        UUID runId = run.getId();
+        StageType type = node.getStageKey();
+        attempt.finish(outcome, failureClass, reason, now);
+        audit.system(runId, "ATTEMPT_FAILED", type.name(), failureClass.name(), reason, Map.of("attemptNo", attempt.getAttemptNo(),
+                "generation", attempt.getGeneration(), "outcome", outcome.name()));
+        failureEvents.attemptFailed(runId, type, node.getGeneration(), failureClass,
+                FailureEventRecorder.causeOf(outcome, attempt.getSimulatedFault(), reason), attempt.getSimulatedFault() != null, now);
+        node.recordFailure(failureClass, reason);
+
+        RetryPolicy policy = stagePolicies.policyFor(type);
+        if (!node.isDegraded() && failureClass == FailureClass.TRANSIENT && policy.allowsRetryAfter(node.getAttempts())) {
+            Duration backoff = policy.backoffAfter(node.getAttempts());
+            node.scheduleRetry(now.plus(backoff));
+            audit.transition(runId, type.name(), StageStatus.RUNNING, StageStatus.RETRY_WAIT, "transient failure: " + reason);
+            audit.system(runId, "RETRY_SCHEDULED", type.name(), "OK", "attempt " + (node.getAttempts() + 1) + " of "
+                    + policy.maxAttempts() + " after " + backoff.toMillis() + " ms", Map.of("nextAttemptAt",
+                    node.getNextAttemptAt().toString(), "backoffMillis", backoff.toMillis(), "failedAttemptNo", attempt.getAttemptNo()));
+            return;
+        }
+        String finalReason = failureClass == FailureClass.TRANSIENT && !node.isDegraded()
+                ? "retries exhausted after " + node.getAttempts() + " attempts: " + reason
+                : reason;
+        Optional<StageAgent> fallback = node.isDegraded() ? Optional.empty() : registry.fallback(type);
+        if (fallback.isPresent()) {
+            node.markDegraded();
+            node.scheduleRetry(now);
+            decisions.save(Decision.create(runId, type, DecisionType.FALLBACK_USED, "FALLBACK", ActorType.SYSTEM, RunAudit.SYSTEM, null,
+                    "primary agent failed (" + finalReason + "); fallback agent " + fallback.get().agentId()
+                            + " produces a degraded result that lowers readiness",
+                    CanonicalJson.write(Map.of("fallbackAgent", fallback.get().agentId(), "primaryFailure", finalReason)), null, now));
+            audit.transition(runId, type.name(), StageStatus.RUNNING, StageStatus.RETRY_WAIT, "switching to fallback agent");
+            audit.system(runId, "FALLBACK_SCHEDULED", type.name(), "DEGRADED", finalReason,
+                    Map.of("fallbackAgent", fallback.get().agentId()));
+            return;
+        }
+        node.fail(failureClass, finalReason, now);
+        failureEvents.stageFailed(runId, type, node.getGeneration());
+        audit.transition(runId, type.name(), StageStatus.RUNNING, StageStatus.FAILED, finalReason);
     }
 
     private void recordPolicies(UUID runId, StageType type, Dispatch dispatch, List<ArtifactDraft> drafts, Instant now) {
@@ -413,19 +549,22 @@ public class RunCoordinator {
         }
     }
 
-    private void deriveRunStatus(WorkflowRun run, List<StageNode> plan, Instant now) {
+    /** Derives the run status from its plan; returns whether the run became terminal. */
+    private boolean deriveRunStatus(WorkflowRun run, List<StageNode> plan, Instant now) {
         Optional<StageNode> failed = plan.stream().filter(n -> n.getStatus() == StageStatus.FAILED).findFirst();
         if (failed.isPresent()) {
-            safeStop(run, plan, "stage " + failed.get().getStageKey() + " failed: " + failed.get().getLastFailureReason(), now);
-            return;
+            safeStop(run.getId(), "STAGE_FAILED", "stage " + failed.get().getStageKey() + " failed: "
+                    + failed.get().getLastFailureReason(), ActorType.SYSTEM, RunAudit.SYSTEM, now);
+            return true;
         }
         boolean allDone = plan.stream().allMatch(n -> n.getStatus().satisfiesDependency() || n.getStatus() == StageStatus.REMOVED);
         if (allDone) {
             resume(run, now);
             run.terminate(RunStatus.COMPLETED, "all stages completed", now);
+            failureEvents.runTerminated(run.getId());
             audit.system(run.getId(), "RUN_TERMINATED", "RUN", "COMPLETED", "all stages completed",
                     Map.of("readiness", String.valueOf(run.getReadiness())));
-            return;
+            return true;
         }
         boolean active = plan.stream().anyMatch(n -> n.getStatus() == StageStatus.RUNNING || n.getStatus() == StageStatus.READY
                 || n.getStatus() == StageStatus.RETRY_WAIT);
@@ -436,6 +575,7 @@ public class RunCoordinator {
         } else if (active) {
             resume(run, now);
         }
+        return false;
     }
 
     private void resume(WorkflowRun run, Instant now) {
@@ -445,20 +585,74 @@ public class RunCoordinator {
         }
     }
 
-    /** Stops the run: no new starts, open stages cancelled, terminal outcome recorded (plan.md §6). */
-    private void safeStop(WorkflowRun run, List<StageNode> plan, String reason, Instant now) {
-        markStopping(run.getId());
-        for (StageNode node : plan) {
+    /**
+     * The safe-stop procedure of plan.md §6 (FR-REL-06): (1) no new dispatch; (2) open stages cancelled,
+     * late results of in-flight attempts discarded; (3, 4) side effects compensated in reverse completion
+     * order and synthetic data removed; (5) terminal outcome persisted, with manual intervention flagged if
+     * compensation failed; (6) final summary produced; (7) {@code RUN_TERMINATED} emitted. Runs inside the
+     * caller's transaction under the run lock.
+     */
+    private void safeStop(UUID runId, String trigger, String reason, ActorType actorType, String actorId, Instant now) {
+        markStopping(runId);
+        WorkflowRun run = runs.findById(runId).orElseThrow();
+        for (StageNode node : nodes.findByRunIdOrderByStageKeyAsc(runId)) {
             StageStatus status = node.getStatus();
             if (!status.isTerminal() && !status.satisfiesDependency()) {
                 node.transitionTo(StageStatus.CANCELLED);
-                audit.transition(run.getId(), node.getStageKey().name(), status, StageStatus.CANCELLED, "run safe-stopped");
+                audit.transition(runId, node.getStageKey().name(), status, StageStatus.CANCELLED, "run safe-stopped");
             }
         }
         RunStatus from = run.getStatus();
+        run.transitionTo(RunStatus.COMPENSATING, now);
+        audit.runTransition(runId, from, RunStatus.COMPENSATING, reason);
+        CompensationCoordinator.Result compensation = compensations.compensate(runId, reason);
+        // Compensation flushes and clears the persistence context: continue with fresh copies.
+        run = runs.findById(runId).orElseThrow();
+        if (!compensation.succeeded()) {
+            run.requireManualIntervention();
+        }
         run.terminate(RunStatus.SAFE_STOPPED, reason, now);
-        audit.runTransition(run.getId(), from, RunStatus.SAFE_STOPPED, reason);
-        audit.system(run.getId(), "RUN_TERMINATED", "RUN", "SAFE_STOPPED", reason, null);
+        failureEvents.runTerminated(runId);
+        audit.runTransition(runId, RunStatus.COMPENSATING, RunStatus.SAFE_STOPPED, reason);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("trigger", trigger);
+        payload.put("compensation", compensation.actions());
+        payload.put("manualInterventionRequired", !compensation.succeeded());
+        decisions.save(Decision.create(runId, null, DecisionType.SAFE_STOP, "SAFE_STOPPED", actorType, actorId, null, reason,
+                CanonicalJson.write(payload), null, now));
+        produceFinalSummary(run, now);
+        audit.system(runId, "RUN_TERMINATED", "RUN", "SAFE_STOPPED", reason,
+                Map.of("trigger", trigger, "manualInterventionRequired", !compensation.succeeded()));
+    }
+
+    /** Step 6 of safe-stop (FR-ORC-17): every terminal run has a final summary, from the fallback if need be. */
+    private void produceFinalSummary(WorkflowRun run, Instant now) {
+        UUID runId = run.getId();
+        if (artifacts.current(runId).containsKey("FINAL_SUMMARY")) {
+            return;
+        }
+        RequirementVersion requirement = currentRequirement(run);
+        Map<String, ArtifactInput> inputs = artifacts.inputsFor(runId, StageType.FINAL_SUMMARY);
+        int generation = nodes.findByRunIdAndStageKey(runId, StageType.FINAL_SUMMARY).map(StageNode::getGeneration).orElse(1);
+        for (Optional<StageAgent> candidate : List.of(registry.primary(StageType.FINAL_SUMMARY), registry.fallback(StageType.FINAL_SUMMARY))) {
+            if (candidate.isEmpty()) {
+                continue;
+            }
+            StageAgent agent = candidate.get();
+            StageContext context = new StageContext(runId, StageType.FINAL_SUMMARY, generation, 0, requirement.getVersion(),
+                    requirement.getContent(), inputs, run.getPolicySetVersion(), scopedPort(runId, StageType.FINAL_SUMMARY, agent),
+                    () -> false);
+            try {
+                if (agent.execute(context) instanceof StageResult.Succeeded summary
+                        && criteria.exit(StageType.FINAL_SUMMARY, summary.artifacts()).isEmpty()) {
+                    artifacts.store(runId, StageType.FINAL_SUMMARY, generation, 0, agent.agentId(), summary.artifacts(), inputs, now);
+                    return;
+                }
+            } catch (RuntimeException e) {
+                audit.system(runId, "SUMMARY_FAILED", StageType.FINAL_SUMMARY.name(), "FAILED",
+                        agent.agentId() + ": " + e.getClass().getSimpleName(), null);
+            }
+        }
     }
 
     private StageAttempt attemptFor(UUID runId, StageType type, int generation, int attemptNo) {

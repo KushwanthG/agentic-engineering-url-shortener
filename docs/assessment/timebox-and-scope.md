@@ -112,3 +112,16 @@ invariants) — they are validation, security, or critical-path evidence.
   Phase 2 audit concurrency defect found during the runs.
 - **Decision (CP1 rule)**: keep all US1 behavior; no simplification of not-found throttling was
   needed. Scope decision SD-1 stands. Next: Phase 4 (orchestration core, SCN-A).
+
+### CP2 (after US4 drills, T082) — 2026-09-26
+
+- **US2–US4 complete?** Yes:
+  - SCN-A end to end, governance hardening, and the reliability suite.
+  - Drills RDR-01..RDR-07 are green, with evidence under `target/evidence/drills/`.
+  - The full suite (444 tests) is green.
+- **Elapsed time vs. plan**: not measured in hours (no time tracking was kept, so no figure is
+  claimed).
+- **Decision (CP2 rule)**: not behind the must-have scope, so the CP2 fallback (engine-only late
+  ambiguity) is not triggered for scope reasons. T096 stays deferred under SD-1 as recorded.
+  T074 (autonomy budget) stays deferred; policy AUT-001 reports budget usage as an advisory.
+  The candidate instructed to implement Phases 5–10 for submission. Next: Phase 7 (US5, SCN-B).

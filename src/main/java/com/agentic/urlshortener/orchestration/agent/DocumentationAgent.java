@@ -90,21 +90,30 @@ public class DocumentationAgent implements StageAgent {
                 .append("; parameters ").append(design.path("releasePlan").path("parameters")).append(".\n");
         doc.append("- **Rollback**: ").append(design.path("rollbackPlan").asString()).append('\n');
 
+        RepositoryCheck check = checkRepositoryDocs(codebaseRoot, capability);
+        doc.append("\n## Repository documentation check\n\n");
+        check.evidence().forEach(e -> doc.append("- ").append(e).append('\n'));
+        doc.append('\n').append(marker(check.updated(), false)).append('\n');
+        return new StageResult.Succeeded(List.of(ArtifactDraft.markdown("DOCUMENTATION", doc.toString())),
+                "documentation generated; repository docs updated: " + check.updated());
+    }
+
+    /** Whether the repository documents the capability at every anchor of the catalog, with evidence per anchor. */
+    record RepositoryCheck(boolean updated, List<String> evidence) {
+    }
+
+    static RepositoryCheck checkRepositoryDocs(Path codebaseRoot, CapabilityEntry capability) {
         List<String> evidence = new ArrayList<>();
         boolean updated = !capability.docAnchors().isEmpty();
         for (CapabilityEntry.DocAnchor anchor : capability.docAnchors()) {
-            boolean mentions = mentions(anchor);
+            boolean mentions = mentions(codebaseRoot, anchor);
             updated &= mentions;
             evidence.add(anchor.path() + (mentions ? " mentions '" : " does not mention '") + anchor.mentions() + "'");
         }
-        doc.append("\n## Repository documentation check\n\n");
-        evidence.forEach(e -> doc.append("- ").append(e).append('\n'));
-        doc.append('\n').append(marker(updated, false)).append('\n');
-        return new StageResult.Succeeded(List.of(ArtifactDraft.markdown("DOCUMENTATION", doc.toString())),
-                "documentation generated; repository docs updated: " + updated);
+        return new RepositoryCheck(updated, evidence);
     }
 
-    private boolean mentions(CapabilityEntry.DocAnchor anchor) {
+    private static boolean mentions(Path codebaseRoot, CapabilityEntry.DocAnchor anchor) {
         Path file = codebaseRoot.resolve(anchor.path()).normalize();
         if (!file.startsWith(codebaseRoot) || !Files.isRegularFile(file)) {
             return false;

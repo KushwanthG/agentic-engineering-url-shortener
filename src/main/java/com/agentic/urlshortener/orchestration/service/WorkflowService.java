@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -35,7 +36,9 @@ import com.agentic.urlshortener.orchestration.engine.RunCoordinator;
 import com.agentic.urlshortener.orchestration.planning.PlanFactory;
 import com.agentic.urlshortener.orchestration.planning.PlanGraph;
 import com.agentic.urlshortener.orchestration.planning.StageSpec;
+import com.agentic.urlshortener.orchestration.policy.PolicySet;
 import com.agentic.urlshortener.orchestration.policy.PolicySetLoader;
+import com.agentic.urlshortener.orchestration.reliability.FaultInjector;
 import com.agentic.urlshortener.orchestration.repository.PlanVersionRepository;
 import com.agentic.urlshortener.orchestration.repository.RequirementVersionRepository;
 import com.agentic.urlshortener.orchestration.repository.StageNodeRepository;
@@ -86,6 +89,10 @@ public class WorkflowService {
         if (submission.simulation() != null && !properties.faultInjection().enabled()) {
             throw new ApiException(ErrorCode.FAULT_INJECTION_DISABLED,
                     "Simulation options are accepted only when fault injection is enabled (demo and test profiles).");
+        }
+        if (submission.simulation() != null) {
+            FaultInjector.validate(submission.simulation(), policySets.current().policies().stream()
+                    .map(PolicySet.PolicyDefinition::id).collect(Collectors.toSet()));
         }
         UUID runId = UUID.randomUUID();
         tx.executeWithoutResult(status -> create(runId, submission, requester));

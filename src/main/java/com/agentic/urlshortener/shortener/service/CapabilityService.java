@@ -5,6 +5,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.EnumMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 
@@ -45,6 +46,12 @@ public class CapabilityService {
             return true;
         }
         return releases.findById(capability.id()).map(CapabilityRelease::isReleased).orElse(false);
+    }
+
+    /** The orchestration run that last changed the capability's release state, if any. */
+    @Transactional(readOnly = true)
+    public Optional<UUID> lastChangedByRun(Capability capability) {
+        return releases.findById(capability.id()).map(CapabilityRelease::getChangedByRun);
     }
 
     /** Release parameters (for example {@code defaultExpiryDays}); empty when none are set. */

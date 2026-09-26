@@ -1,5 +1,6 @@
 package com.agentic.urlshortener.orchestration.agent;
 
+import java.time.Duration;
 import java.util.List;
 
 import com.agentic.urlshortener.orchestration.domain.FailureClass;
@@ -16,6 +17,13 @@ public sealed interface StageResult {
 
     /** The stage failed; only transient failures are retried. */
     record Failed(FailureClass failureClass, String reason) implements StageResult {
+    }
+
+    /**
+     * Produced by the dispatcher, never by an agent: the attempt exceeded its timeout, was interrupted,
+     * and counts as a transient failure; a result the agent returns later is discarded.
+     */
+    record TimedOut(Duration timeout) implements StageResult {
     }
 
     /** The stage found a blocking ambiguity; the engine opens a clarification for its dependents. */

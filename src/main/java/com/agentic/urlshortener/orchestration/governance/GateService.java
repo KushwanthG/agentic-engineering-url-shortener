@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -24,6 +25,7 @@ import com.agentic.urlshortener.orchestration.domain.AwaitingType;
 import com.agentic.urlshortener.orchestration.domain.Decision;
 import com.agentic.urlshortener.orchestration.domain.DecisionType;
 import com.agentic.urlshortener.orchestration.domain.FailureClass;
+import com.agentic.urlshortener.orchestration.domain.PolicyExceptionRecord;
 import com.agentic.urlshortener.orchestration.domain.RunStatus;
 import com.agentic.urlshortener.orchestration.domain.StageNode;
 import com.agentic.urlshortener.orchestration.domain.StageStatus;
@@ -36,6 +38,7 @@ import com.agentic.urlshortener.orchestration.engine.RunCoordinator;
 import com.agentic.urlshortener.orchestration.engine.RunLocks;
 import com.agentic.urlshortener.orchestration.reliability.CompensationCoordinator;
 import com.agentic.urlshortener.orchestration.repository.DecisionRepository;
+import com.agentic.urlshortener.orchestration.repository.PolicyExceptionRepository;
 import com.agentic.urlshortener.orchestration.repository.StageNodeRepository;
 import com.agentic.urlshortener.orchestration.repository.WorkflowRunRepository;
 
@@ -57,6 +60,7 @@ public class GateService {
     private final WorkflowRunRepository runs;
     private final StageNodeRepository nodes;
     private final DecisionRepository decisions;
+    private final PolicyExceptionRepository exceptions;
     private final ArtifactStore artifacts;
     private final RunCoordinator coordinator;
     private final CompensationCoordinator compensation;
@@ -67,7 +71,9 @@ public class GateService {
 
     public GateService(WorkflowRunRepository runs, StageNodeRepository nodes, DecisionRepository decisions, ArtifactStore artifacts,
             RunCoordinator coordinator, CompensationCoordinator compensation, RunLocks locks, RunAudit audit,
+            PolicyExceptionRepository exceptions,
             PlatformTransactionManager transactionManager, Clock clock) {
+        this.exceptions = exceptions;
         this.runs = runs;
         this.nodes = nodes;
         this.decisions = decisions;
@@ -82,7 +88,7 @@ public class GateService {
 
     public Decision decide(UUID runId, StageType gate, GateDecisionRequest request, ApiPrincipal principal) {
         Decision decision = locks.withLock(runId, () -> {
-            ApiException refusal = tx.execute(status -> check(runId, gate, principal));
+            ApiException refusal = tx.execute(status -> check(runId, gate, principal, request));
             if (refusal != null) {
                 audit.record(runId, ActorType.HUMAN, principal.id(), "DECISION_REFUSED", gate.name(), null, null, "REFUSED",
                         refusal.getMessage(), Map.of("code", refusal.code().name()));
@@ -99,7 +105,7 @@ public class GateService {
     }
 
     /** Returns the reason to refuse the decision (audited), or null when it may be recorded; throws for unknown targets. */
-    private ApiException check(UUID runId, StageType gate, ApiPrincipal principal) {
+    private ApiException check(UUID runId, StageType gate, ApiPrincipal principal, GateDecisionRequest request) {
         WorkflowRun run = runs.findById(runId)
                 .orElseThrow(() -> new ApiException(ErrorCode.RUN_NOT_FOUND, "No workflow run " + runId + "."));
         if (!ReviewBundles.isApprovalGate(gate)) {
@@ -126,6 +132,28 @@ public class GateService {
         if (node.getDecisionDeadline() != null && now().isAfter(node.getDecisionDeadline())) {
             return new ApiException(ErrorCode.DEADLINE_PASSED,
                     "The decision deadline " + node.getDecisionDeadline() + " for " + gate + " has passed; the gate is escalated.");
+        }
+        if (gate == StageType.RELEASE_APPROVAL && request.approve()) {
+            return releaseReadiness(run);
+        }
+        return null;
+    }
+
+    /**
+     * Release-time re-check (FR-RDY-02, FR-RDY-04): the release is refused while the run is not ready, or
+     * when an exception readiness relied on has expired since compliance was evaluated.
+     */
+    private ApiException releaseReadiness(WorkflowRun run) {
+        if ("NOT_READY".equals(run.getReadiness())) {
+            return new ApiException(ErrorCode.RELEASE_NOT_READY, "The run is not ready for release.");
+        }
+        Instant now = now();
+        List<String> expired = exceptions.findByRunIdOrderByRequestedAtAsc(run.getId()).stream()
+                .filter(e -> PolicyExceptionRecord.APPROVED.equals(e.getStatus()) && !e.isEffectiveAt(now))
+                .map(e -> e.getPolicyId() + " (expired " + e.getExpiresAt() + ")").toList();
+        if (!expired.isEmpty()) {
+            return new ApiException(ErrorCode.RELEASE_NOT_READY, "Policy exceptions this release relies on have expired: " + expired
+                    + "; request a new exception or fix the policy failure.");
         }
         return null;
     }
@@ -175,7 +203,7 @@ public class GateService {
                 audit.transition(runId, node.getStageKey().name(), status, StageStatus.CANCELLED, "run rejected");
             }
         }
-        boolean compensated = compensation.compensate(runId, reason);
+        boolean compensated = compensation.compensate(runId, reason).succeeded();
         // Compensation flushes and clears the persistence context: continue with a fresh copy of the run.
         WorkflowRun current = runs.findById(runId).orElseThrow();
         if (!compensated) {

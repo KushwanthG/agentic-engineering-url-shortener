@@ -39,7 +39,10 @@ public class PolicyEngine {
         List<String> accepted = new ArrayList<>();
         for (PolicySet.PolicyDefinition policy : policySet.policies()) {
             PolicyRule rule = rules.get(policy.id());
-            RuleOutcome outcome = rule == null ? RuleOutcome.fail("no rule implements " + policy.id()) : safely(rule, context);
+            boolean simulated = context.simulatedPolicyFailures() != null && context.simulatedPolicyFailures().contains(policy.id());
+            RuleOutcome outcome = simulated
+                    ? RuleOutcome.fail("simulated policy failure (fault injection; demonstration input, not a real violation)")
+                    : rule == null ? RuleOutcome.fail("no rule implements " + policy.id()) : safely(rule, context);
             String result = outcome.outcome();
             String evidence = outcome.evidence();
             UUID exceptionId = null;
@@ -58,7 +61,7 @@ public class PolicyEngine {
                 }
             }
             evaluations.add(new PolicyResult.Evaluation(policy.id(), policy.title(), policy.domain(), policy.severity(), result, evidence,
-                    exceptionId, false));
+                    exceptionId, simulated));
         }
         return new PolicyResult(pinnedVersion, evaluations, !blocking.isEmpty(), blocking, advisory, accepted);
     }

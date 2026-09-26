@@ -114,7 +114,8 @@ public class InProcessApplicationPlaneAdapter implements ApplicationPlanePort {
     @Override
     public CapabilityState capability(String capabilityId) {
         Capability capability = require(capabilityId);
-        return new CapabilityState(capabilityId, capabilities.isReleased(capability), capabilities.parameters(capability));
+        return new CapabilityState(capabilityId, capabilities.isReleased(capability), capabilities.parameters(capability),
+                capabilities.lastChangedByRun(capability).orElse(null));
     }
 
     @Override
@@ -166,7 +167,7 @@ public class InProcessApplicationPlaneAdapter implements ApplicationPlanePort {
         audit.append(new AuditRecord(null, ActorType.SYSTEM, "orchestrator", "CAPABILITY_CHANGED", capabilityId,
                 String.valueOf(change.previouslyReleased()), String.valueOf(released), change.changed() ? "CHANGED" : "UNCHANGED",
                 reason, CanonicalJson.write(details)));
-        return new CapabilityState(capabilityId, released, change.parameters());
+        return new CapabilityState(capabilityId, released, change.parameters(), runId);
     }
 
     private static Capability require(String capabilityId) {

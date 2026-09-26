@@ -106,10 +106,12 @@ the run verifies as intact (E-A8), and a final engineering summary exists (E-A9)
 
 ## 7. Failure path
 
-A transient `TESTING` failure recovering through bounded retry is drill **RDR-01**. It runs the
-same GF-001 input with a labeled simulated fault. Retry, timeout, and fallback are implemented in
-Phase 6 (T067–T068, ADR-009). Until then, RDR-01 is planned but not demonstrated. A material
-ambiguity that emerges later suspends only the affected path (FR-RPL-06, Phase 8).
+A transient `TESTING` failure that recovers through bounded retry is drill **RDR-01**. It runs the
+same GF-001 input with `TRANSIENT_ERROR` ×2 on `TESTING`, a labeled simulated fault. The recorded
+result: attempts `FAILED_TRANSIENT`, `FAILED_TRANSIENT`, `SUCCEEDED`, and the run `COMPLETED`. The
+other failure paths on the same input (fallback, rollback, gate deadline, policy exception, operator
+stop) are drills RDR-02..RDR-07: see [drills.md](drills.md). A material ambiguity that emerges
+later suspends only the affected path (FR-RPL-06, Phase 8).
 
 ## 8. Evidence index
 

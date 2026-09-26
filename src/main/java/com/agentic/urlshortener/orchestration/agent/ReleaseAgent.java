@@ -70,6 +70,13 @@ public class ReleaseAgent implements StageAgent {
         });
 
         if (!verification.passed()) {
+            // Roll back only while the flag still holds this run's value (ADR-010); otherwise record the conflict.
+            CapabilityState current = context.port().capability(capability);
+            if (!context.runId().equals(current.changedByRun())) {
+                return new StageResult.Failed(FailureClass.PERMANENT, "post-release verification failed (" + verification.evidence()
+                        + "); rollback skipped: " + capability + " was changed by run " + current.changedByRun()
+                        + " after this run released it (conflict recorded; manual review)");
+            }
             context.port().setRelease(capability, previous.released(), previous.parameters(), context.runId(),
                     "rollback: post-release verification failed");
             return new StageResult.Failed(FailureClass.PERMANENT, "post-release verification failed (" + verification.evidence()

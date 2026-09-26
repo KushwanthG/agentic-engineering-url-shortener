@@ -115,15 +115,17 @@ public final class ScriptedAgent implements StageAgent {
             return new Scripts();
         }
 
+        /** Scripted primaries for every non-gate stage, plus the production fallback agents (FR-REL-03). */
         @Bean
         @Primary
-        public AgentRegistry scriptedAgentRegistry(Scripts scripts) {
+        public AgentRegistry scriptedAgentRegistry(Scripts scripts, List<StageAgent> productionAgents) {
             List<StageAgent> agents = new ArrayList<>();
             for (StageType type : StageType.values()) {
                 if (!type.isGate()) {
                     agents.add(new ScriptedAgent(type, scripts));
                 }
             }
+            productionAgents.stream().filter(StageAgent::fallback).forEach(agents::add);
             return new AgentRegistry(agents);
         }
     }

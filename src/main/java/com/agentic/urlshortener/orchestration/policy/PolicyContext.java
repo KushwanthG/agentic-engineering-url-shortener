@@ -4,7 +4,9 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.LinkedHashSet;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import com.agentic.urlshortener.common.util.CanonicalJson;
@@ -27,7 +29,8 @@ public record PolicyContext(
         int auditRetentionDays,
         int attemptsUsed,
         int maxAttempts,
-        List<SbomReader.Component> sbom) {
+        List<SbomReader.Component> sbom,
+        Set<String> simulatedPolicyFailures) {
 
     /** A valid decision with the fingerprints it is bound to. */
     public record DecisionFact(String stageKey, String outcome, Map<String, String> boundFingerprints) {
@@ -66,6 +69,7 @@ public record PolicyContext(
         private int attemptsUsed;
         private int maxAttempts = 60;
         private List<SbomReader.Component> sbom = List.of();
+        private final Set<String> simulatedPolicyFailures = new LinkedHashSet<>();
 
         private Builder(UUID runId) {
             this.runId = runId;
@@ -111,9 +115,15 @@ public record PolicyContext(
             return this;
         }
 
+        /** A policy forced to FAIL by fault injection (FR-REL-11); its evaluation is flagged simulated. */
+        public Builder simulatedPolicyFailure(String policyId) {
+            simulatedPolicyFailures.add(policyId);
+            return this;
+        }
+
         public PolicyContext build() {
             return new PolicyContext(runId, classification, Map.copyOf(artifacts), List.copyOf(decisions), auditValid, auditEvidence,
-                    auditRetentionDays, attemptsUsed, maxAttempts, sbom);
+                    auditRetentionDays, attemptsUsed, maxAttempts, sbom, Set.copyOf(simulatedPolicyFailures));
         }
     }
 }

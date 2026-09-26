@@ -37,8 +37,11 @@ ambiguity (FR-RPL-06). Approvals must stay valid exactly when the reviewed conte
    `PENDING` with `generation + 1`; outputs of the previous generation are marked `superseded`,
    and in-flight attempts are discarded when they finish.
 4. **Re-evaluation**: when an invalidated stage becomes ready, `InputFingerprinter` computes
-   SHA-256 over the canonical JSON of (stage type, input artifact fingerprints, relevant
-   requirement fields, relevant decisions). If it equals the stage's last successful
+   SHA-256 over the canonical JSON of (stage type, agent id and version, the versions of every
+   knowledge resource the agent reads — capability catalog, ambiguity lexicon, policy set —,
+   input artifact fingerprints, relevant requirement fields, relevant decisions). The agent and
+   knowledge versions were added after the pre-implementation review (RC-1): without them a
+   changed catalog or agent could let a stale output be reused. If it equals the stage's last successful
    `input_fingerprint`, the stage is marked `SUCCEEDED` with `reused = true` (audited as
    `STAGE_REUSED`) without running; otherwise it runs.
 5. **Structural change**: `PlanFactory` recomputes the stage set from the new classification

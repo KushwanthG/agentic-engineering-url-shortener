@@ -56,7 +56,7 @@ decision, and release readiness is blocked until then.
 | G2 | Requirements approved | PENDING RATIFICATION | — | — |
 | G3 | Clarifications decided | PENDING RATIFICATION | — | — |
 | G4 | Architecture and ADRs accepted | PENDING RATIFICATION | — | — |
-| G5 | Implementation may start | NOT YET REACHED | — | — |
+| G5 | Implementation may start | PENDING RATIFICATION | — | — |
 | G6 | Release readiness decided | NOT YET REACHED | — | — |
 | G7 | Final submission | NOT YET REACHED | — | — |
 
@@ -257,3 +257,29 @@ and decides whether redirects may be cached.
 | ADR | Candidate decision |
 |-----|--------------------|
 | ADR-001 … ADR-019 | _pending_ (record per ADR in each file's Status section) |
+
+---
+
+## G5 — Implementation may start (pre-implementation baseline)
+
+- **Artifacts**: [`pre-implementation-analysis.md`](../assessment/pre-implementation-analysis.md)
+  (run 1: 1 CRITICAL, 1 HIGH, 19 MEDIUM/LOW; run 2: 0 CRITICAL, coverage 100%) and
+  [`pre-implementation-review.md`](../assessment/pre-implementation-review.md) (verdict PROCEED
+  WITH CONDITIONS; RC-1..RC-8 applied upstream), [`tasks.md`](../../specs/001-agentic-url-shortener/tasks.md)
+  (132 tasks), and the seven custom checklists in
+  [`specs/001-agentic-url-shortener/checklists/`](../../specs/001-agentic-url-shortener/checklists/).
+- **Checklist status**: 0 of 167 custom checklist items reviewed. They are reviewer-owned; the
+  assistant did not mark any.
+- **Assistant recommendation**: approve the start of implementation, subject to your ratification
+  of G1–G4. Until then, implementation proceeds **provisionally** under the Delegated Provisional
+  Progression clause. Any rejection reopens the affected tasks through the SpecKit stages
+  (`/speckit-specify` → … → `/speckit-analyze`).
+- **Decision**: _pending_ · **Decided by**: _pending_ · **Date**: _pending_ · **Notes**: _pending_
+
+### Pending human review items raised during implementation
+
+| Item | Raised by | Status |
+|------|-----------|--------|
+| Review of the brownfield impact analysis before the click-limit code (task T086) | tasks.md | pending — added when T086 runs |
+| Change-control approval of contract versions 1.1.0 and 1.2.0 (task T112) | tasks.md | pending |
+| Exception for any accepted dependency-scan finding (task T128) | tasks.md | pending if applicable |

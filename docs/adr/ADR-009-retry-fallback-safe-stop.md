@@ -60,6 +60,7 @@ degradation stays visible all the way to the release decision.
 | Risk | Mitigation |
 |------|------------|
 | Interrupted agent threads leave partial side effects | only `RELEASE` and probe stages have side effects; both are idempotent and compensable |
+| An agent ignores interruption after a timeout and keeps a worker of the bounded pool; repeated cases starve the engine (review RC-6) | agents check the cancellation signal between steps; JDBC query timeout for agent database calls; `sdlc.executor.active` gauge; the timeout still frees the *stage* (late results discarded), and the residual pool-starvation risk is recorded in the risk register |
 | A misclassified permanent error retried needlessly | default is permanent; transient requires an explicit exception type |
 
 ## Reversibility

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agentic-sdlc:schema:requirement-document:1.0.0",
+  "title": "RequirementDocument",
+  "description": "A requirement version as submitted, clarified, or amended (artifact type REQUIREMENT).",
+  "type": "object",
+  "required": ["title", "type", "narrative", "acceptanceCriteria", "constraints", "clarifications", "scopeExclusions", "parameters"],
+  "additionalProperties": false,
+  "properties": {
+    "ref": { "type": ["string", "null"], "maxLength": 64 },
+    "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "type": { "enum": ["NEW_CAPABILITY", "CHANGE_TO_EXISTING", "UNSPECIFIED"] },
+    "narrative": { "type": "string", "minLength": 1, "maxLength": 10000 },
+    "acceptanceCriteria": {
+      "type": "array",
+      "maxItems": 30,
+      "items": {
+        "type": "object",
+        "required": ["id", "text"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^AC-[0-9]+$" },
+          "text": { "type": "string", "minLength": 1, "maxLength": 1000 },
+          "origin": { "enum": ["SUBMITTED", "DERIVED_FROM_DECISION"] }
+        }
+      }
+    },
+    "constraints": { "type": "array", "maxItems": 30, "items": { "type": "string", "maxLength": 1000 } },
+    "clarifications": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["questionId", "question", "answer"],
+        "additionalProperties": false,
+        "properties": {
+          "questionId": { "type": "string" },
+          "question": { "type": "string" },
+          "answer": { "type": "string" },
+          "decisionId": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "scopeExclusions": { "type": "array", "items": { "type": "string" } },
+    "parameters": { "type": "object", "additionalProperties": { "type": ["string", "number", "integer", "boolean"] } }
+  }
+}

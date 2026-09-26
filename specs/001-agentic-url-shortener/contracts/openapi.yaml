@@ -1,0 +1,1469 @@
+openapi: 3.0.3
+info:
+  title: Agentic SDLC System - URL Shortener API
+  version: 1.2.0
+  description: |
+    Contract-first API for the governed agentic SDLC orchestration system (control plane) and the
+    URL shortener it governs (application plane). Feature `001-agentic-url-shortener`.
+
+    **Versioning** (see `CHANGELOG.md` next to this file): URL major version (`/api/v1`) plus
+    semantic `info.version`. Adding optional fields, endpoints, or error codes is MINOR; removing or
+    renaming anything, or making an optional field required, is MAJOR and needs a change-control
+    approval.
+
+    **Errors** use RFC 9457 problem details (`application/problem+json`) with a stable machine-
+    readable `code` and the request `correlationId`. Internal details are never exposed.
+
+    **Authentication**: bearer tokens mapped to roles (`API_CONSUMER`, `REQUESTER`, `APPROVER`,
+    `RELEASE_OWNER`, `AUDITOR`). Redirects (`GET /{code}`) and health/info are public.
+  license:
+    name: Proprietary assessment submission
+servers:
+  - url: http://localhost:8080
+    description: Local developer machine
+tags:
+  - name: links
+    description: Application plane - short-link management (API consumers)
+  - name: redirect
+    description: Application plane - public redirect resolution
+  - name: workflows
+    description: Control plane - workflow runs, plans, artifacts, timeline
+  - name: governance
+    description: Control plane - human gates, clarifications, change requests, policy exceptions
+  - name: operations
+    description: Control plane - operator controls (pause, resume, safe-stop)
+  - name: evidence
+    description: Control plane - audit, policies, capabilities, reliability report
+security:
+  - bearerAuth: []
+
+paths:
+  /api/v1/links:
+    post:
+      tags: [links]
+      operationId: createLink
+      summary: Create a short link
+      description: |
+        Creates a short link for a validated, normalized `http`/`https` URL. Requires role
+        `API_CONSUMER`. `alias` requires the `custom-alias` capability and `maxClicks` requires the
+        `click-limit` capability; while a capability is unreleased the request is rejected with
+        `422 CAPABILITY_NOT_AVAILABLE`. Supplying `Idempotency-Key` makes retries safe: an identical
+        request with the same key within 24 h replays the original response (`Idempotency-Replayed:
+        true`); the same key with a different payload returns `409 IDEMPOTENCY_KEY_REUSED`.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLinkRequest'
+            examples:
+              basic:
+                value: { url: 'https://www.example.com/articles/2026/spring-sale?ref=newsletter' }
+              withExpiry:
+                value: { url: 'https://www.example.com/promo', expiresAt: '2026-12-31T23:59:59Z' }
+              withAlias:
+                summary: Requires the custom-alias capability (API 1.1.0)
+                value: { url: 'https://www.example.com/spring', alias: 'spring-sale' }
+              withClickLimit:
+                summary: Requires the click-limit capability (API 1.2.0)
+                value: { url: 'https://www.example.com/invite', maxClicks: 1 }
+      responses:
+        '201':
+          description: Link created (or replayed for a repeated idempotent request)
+          headers:
+            Location:
+              schema: { type: string }
+              description: Path of the link metadata resource
+            Idempotency-Replayed:
+              schema: { type: boolean }
+              description: Present and `true` when the response is a replay
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LinkResponse'
+              examples:
+                created:
+                  value:
+                    code: aB3dE9x
+                    shortUrl: http://localhost:8080/aB3dE9x
+                    targetUrl: https://www.example.com/articles/2026/spring-sale?ref=newsletter
+                    createdAt: '2026-09-26T10:15:30Z'
+                    status: ACTIVE
+                    customAlias: false
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+  /api/v1/links/{code}:
+    get:
+      tags: [links]
+      operationId: getLink
+      summary: Get short-link metadata
+      parameters:
+        - $ref: '#/components/parameters/LinkCode'
+      responses:
+        '200':
+          description: Link metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LinkResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+  /api/v1/links/{code}/stats:
+    get:
+      tags: [links]
+      operationId: getLinkStats
+      summary: Get click analytics for a short link
+      description: Total clicks, last access, and per-day counts for the last 30 UTC days.
+      parameters:
+        - $ref: '#/components/parameters/LinkCode'
+      responses:
+        '200':
+          description: Link analytics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LinkStatsResponse'
+              examples:
+                stats:
+                  value:
+                    code: aB3dE9x
+                    totalClicks: 3
+                    lastAccessedAt: '2026-09-26T10:20:01Z'
+                    windowDays: 30
+                    daily: [ { date: '2026-09-26', clicks: 3 } ]
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+  /{code}:
+    get:
+      tags: [redirect]
+      operationId: resolveLink
+      summary: Resolve a short code (public redirect)
+      description: |
+        Redirects to the stored target with `302 Found` and `Cache-Control: no-store`, so every
+        resolution reaches the service and is counted. Unknown or malformed codes return 404,
+        expired or click-exhausted links return 410. Excessive not-found outcomes from one client
+        address are throttled with 429.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/RedirectCode'
+      responses:
+        '302':
+          description: Redirect to the target URL
+          headers:
+            Location:
+              schema: { type: string }
+            Cache-Control:
+              schema: { type: string, example: no-store }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { $ref: '#/components/responses/Gone' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+  /api/v1/workflows:
+    post:
+      tags: [workflows]
+      operationId: submitRequirement
+      summary: Submit a requirement and start a governed workflow run
+      description: |
+        Requires role `REQUESTER`. Creates a run with a validated dependency graph (plan version 1)
+        and the pinned policy-set version, then starts it asynchronously. `simulation` is accepted
+        only when fault injection is enabled (demo profile); otherwise `400 FAULT_INJECTION_DISABLED`.
+      parameters:
+        - $ref: '#/components/parameters/CorrelationIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequirementSubmission'
+            examples:
+              greenfield:
+                summary: SCN-A (abbreviated)
+                value:
+                  ref: GF-001
+                  title: Custom aliases for short links
+                  type: NEW_CAPABILITY
+                  narrative: As an API consumer, I want to optionally choose a custom alias when I create a short link so that I can share memorable links.
+                  acceptanceCriteria:
+                    - Given the capability is released, when a consumer creates a link for a valid URL with the alias `spring-sale`, then the link is created and its short code is `spring-sale`.
+                  constraints:
+                    - Aliases are case-sensitive, like generated codes, and share the code namespace.
+      responses:
+        '201':
+          description: Run created
+          headers:
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRun'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    get:
+      tags: [workflows]
+      operationId: listRuns
+      summary: List workflow runs (newest first)
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        '200':
+          description: Runs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RunSummary'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/workflows/{runId}:
+    get:
+      tags: [workflows]
+      operationId: getRun
+      summary: Inspect a run (status, stages, pending human actions)
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: Run state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRun'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/workflows/{runId}/plan-versions:
+    get:
+      tags: [workflows]
+      operationId: getPlanVersions
+      summary: Plan (dependency graph) history with diffs
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: Plan versions, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlanVersion'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/workflows/{runId}/requirement-versions:
+    get:
+      tags: [workflows]
+      operationId: getRequirementVersions
+      summary: Requirement versions (submitted, clarified, amended)
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: Requirement versions, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RequirementVersion'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/workflows/{runId}/artifacts:
+    get:
+      tags: [workflows]
+      operationId: listArtifacts
+      summary: List stage artifacts with provenance
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+        - name: includeSuperseded
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Artifacts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ArtifactSummary'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/workflows/{runId}/artifacts/{artifactId}:
+    get:
+      tags: [workflows]
+      operationId: getArtifact
+      summary: Artifact content, inputs, and decision lineage
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+        - name: artifactId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Artifact detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactDetail'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/workflows/{runId}/decisions:
+    get:
+      tags: [workflows]
+      operationId: listDecisions
+      summary: Decision log (human, agent, and system decisions)
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: Decisions, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Decision'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/workflows/{runId}/timeline:
+    get:
+      tags: [workflows]
+      operationId: getTimeline
+      summary: Stage attempts with start and end times (parallelism and latency evidence)
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: Attempts ordered by start time
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TimelineEntry'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/workflows/{runId}/policy-evaluations:
+    get:
+      tags: [evidence]
+      operationId: listPolicyEvaluations
+      summary: Policy outcomes recorded for a run
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: Evaluations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PolicyEvaluation'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/workflows/{runId}/gates/{stageKey}/decision:
+    post:
+      tags: [governance]
+      operationId: decideGate
+      summary: Approve or reject a human approval gate
+      description: |
+        `ARCHITECTURE_APPROVAL` requires `APPROVER`; `RELEASE_APPROVAL` requires `RELEASE_OWNER`.
+        The requester of the run cannot decide these gates (`403 SEPARATION_OF_DUTIES`). Release
+        approval is refused while readiness is `NOT_READY` (`409 RELEASE_NOT_READY`). The approval
+        is bound to the fingerprints of the review artifacts listed in the pending action.
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+        - $ref: '#/components/parameters/StageKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GateDecisionRequest'
+            examples:
+              approve:
+                value: { decision: APPROVE, rationale: Design reviewed; API change is backward compatible. }
+      responses:
+        '200':
+          description: Decision recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Decision'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/workflows/{runId}/clarifications:
+    post:
+      tags: [governance]
+      operationId: answerClarification
+      summary: Answer the open clarification questions of a run
+      description: Requires `APPROVER`. Produces a new requirement version and triggers replanning.
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClarificationAnswers'
+      responses:
+        '200':
+          description: Answers recorded; run replanned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClarificationResult'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/workflows/{runId}/change-requests:
+    post:
+      tags: [governance]
+      operationId: submitChangeRequest
+      summary: Submit an amended requirement to an active run
+      description: |
+        Requires `REQUESTER`. A non-material change, or any change before an approval exists, is
+        applied immediately (replanning). A material change after an approval inserts a
+        `CHANGE_APPROVAL` gate that blocks every stage not yet started until an approver decides.
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeRequestSubmission'
+      responses:
+        '202':
+          description: Change request accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeRequest'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/workflows/{runId}/change-requests/{changeRequestId}/decision:
+    post:
+      tags: [governance]
+      operationId: decideChangeRequest
+      summary: Approve or reject a pending material change request
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+        - name: changeRequestId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GateDecisionRequest'
+      responses:
+        '200':
+          description: Decision recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeRequest'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/workflows/{runId}/policy-exceptions:
+    post:
+      tags: [governance]
+      operationId: requestPolicyException
+      summary: Request a time-bound exception for a failed policy
+      description: Requires `REQUESTER`. Only valid while the compliance stage awaits a policy exception.
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyExceptionRequest'
+      responses:
+        '201':
+          description: Exception requested (status `PENDING`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyException'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/workflows/{runId}/policy-exceptions/{exceptionId}/decision:
+    post:
+      tags: [governance]
+      operationId: decidePolicyException
+      summary: Approve or reject a policy exception
+      description: Requires `APPROVER`; the approver must differ from the requester of the exception.
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+        - name: exceptionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GateDecisionRequest'
+      responses:
+        '200':
+          description: Decision recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyException'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/workflows/{runId}/pause:
+    post:
+      tags: [operations]
+      operationId: pauseRun
+      summary: Pause a run (no new stages start; in-flight stages finish)
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperatorActionRequest'
+      responses:
+        '200':
+          description: Run paused
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRun'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/workflows/{runId}/resume:
+    post:
+      tags: [operations]
+      operationId: resumeRun
+      summary: Resume a paused run
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperatorActionRequest'
+      responses:
+        '200':
+          description: Run resumed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRun'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/workflows/{runId}/safe-stop:
+    post:
+      tags: [operations]
+      operationId: safeStopRun
+      summary: Safe-stop a run (halt, compensate, record terminal outcome)
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperatorActionRequest'
+      responses:
+        '200':
+          description: Safe-stop initiated; the run reaches `SAFE_STOPPED`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowRun'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/workflows/{runId}/audit:
+    get:
+      tags: [evidence]
+      operationId: getAuditTrail
+      summary: Append-only, hash-chained audit trail of a run
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: Audit events ordered by sequence
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditEvent'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/workflows/{runId}/audit/verification:
+    get:
+      tags: [evidence]
+      operationId: verifyAuditTrail
+      summary: Recompute the hash chain and report integrity
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: Verification result (valid or first broken sequence)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditVerification'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/workflows/{runId}/summary:
+    get:
+      tags: [evidence]
+      operationId: getFinalSummary
+      summary: Final engineering summary of a terminal run (Markdown)
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: Markdown summary
+          content:
+            text/markdown:
+              schema: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/reliability/report:
+    get:
+      tags: [evidence]
+      operationId: getReliabilityReport
+      summary: Reliability metrics computed from recorded evidence (demonstration data)
+      responses:
+        '200':
+          description: Report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReliabilityReport'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/policies:
+    get:
+      tags: [evidence]
+      operationId: getPolicySet
+      summary: Active versioned policy set
+      responses:
+        '200':
+          description: Policy set
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicySet'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/capabilities:
+    get:
+      tags: [evidence]
+      operationId: listCapabilities
+      summary: Capability release states of the application plane
+      responses:
+        '200':
+          description: Capabilities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Capability'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Opaque bearer token mapped to a principal and roles (demo tokens are labeled non-production).
+
+  headers:
+    CorrelationId:
+      description: Correlation identifier of the request (echoed or generated)
+      schema: { type: string }
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,128}$' }
+    CorrelationIdHeader:
+      name: X-Correlation-Id
+      in: header
+      required: false
+      description: Accepted when it matches `^[A-Za-z0-9-]{8,64}$`; otherwise a new id is generated.
+      schema: { type: string }
+    LinkCode:
+      name: code
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,64}$' }
+    RedirectCode:
+      name: code
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[A-Za-z0-9_-]{3,32}$' }
+    RunId:
+      name: runId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    StageKey:
+      name: stageKey
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/StageType'
+
+  responses:
+    BadRequest:
+      description: Validation failed
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            scheme:
+              value:
+                type: urn:problem-type:url-scheme-not-allowed
+                title: URL scheme not allowed
+                status: 400
+                detail: "Only http and https URLs can be shortened; got 'javascript'."
+                code: URL_SCHEME_NOT_ALLOWED
+                correlationId: 3f1c2b9e-6a1d-4c55-9b0e-2f7d8c1a4b6e
+    Unauthorized:
+      description: Missing or invalid credentials
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Forbidden:
+      description: Authenticated but not permitted (role or separation of duties)
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: Resource not found
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Gone:
+      description: Link expired or its click limit is exhausted
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Conflict:
+      description: State conflict (alias in use, idempotency key reused, illegal state, deadline passed, release not ready)
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unprocessable:
+      description: Request is valid but the capability it needs is not released
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    TooManyRequests:
+      description: Rate limit exceeded
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    ServiceUnavailable:
+      description: Dependency temporarily unavailable (retryable)
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+    Problem:
+      type: object
+      description: |
+        RFC 9457 problem detail. `code` values: VALIDATION_FAILED, URL_INVALID,
+        URL_SCHEME_NOT_ALLOWED, URL_CREDENTIALS_NOT_ALLOWED, URL_HOST_MISSING, URL_HOST_NOT_ALLOWED,
+        URL_TOO_LONG, INVALID_EXPIRY, INVALID_ALIAS, RESERVED_ALIAS, ALIAS_CONFLICT,
+        INVALID_CLICK_LIMIT, CAPABILITY_NOT_AVAILABLE, INVALID_IDEMPOTENCY_KEY,
+        IDEMPOTENCY_KEY_REUSED, RATE_LIMITED, CODE_GENERATION_EXHAUSTED, LINK_NOT_FOUND,
+        LINK_EXPIRED, STORE_UNAVAILABLE, UNAUTHENTICATED, FORBIDDEN, SEPARATION_OF_DUTIES,
+        RUN_NOT_FOUND, ARTIFACT_NOT_FOUND, CHANGE_REQUEST_NOT_FOUND, EXCEPTION_NOT_FOUND,
+        ILLEGAL_STATE, DEADLINE_PASSED, RELEASE_NOT_READY, RUN_TERMINAL, CONCURRENT_DECISION,
+        FAULT_INJECTION_DISABLED, INTERNAL_ERROR.
+      required: [type, title, status, code, correlationId]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        code: { type: string }
+        correlationId: { type: string }
+        retryAfterSeconds: { type: integer }
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldError'
+    FieldError:
+      type: object
+      required: [field, message]
+      properties:
+        field: { type: string }
+        message: { type: string }
+
+    CreateLinkRequest:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          description: Absolute http/https URL (max 2,048 characters after normalization)
+        expiresAt:
+          type: string
+          format: date-time
+          description: Must be in the future and at most 5 years ahead
+        alias:
+          type: string
+          description: Since 1.1.0. Custom short code (3-32 of `[A-Za-z0-9_-]`); needs capability `custom-alias`.
+        maxClicks:
+          type: integer
+          format: int64
+          description: Since 1.2.0. Maximum successful redirects (1-1,000,000); needs capability `click-limit`.
+    LinkResponse:
+      type: object
+      required: [code, shortUrl, targetUrl, createdAt, status, customAlias]
+      properties:
+        code: { type: string }
+        shortUrl: { type: string }
+        targetUrl: { type: string }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        status: { type: string, enum: [ACTIVE, EXPIRED] }
+        customAlias: { type: boolean, description: Since 1.1.0 }
+        maxClicks: { type: integer, format: int64, description: Since 1.2.0 }
+    LinkStatsResponse:
+      type: object
+      required: [code, totalClicks, windowDays, daily]
+      properties:
+        code: { type: string }
+        totalClicks: { type: integer, format: int64 }
+        lastAccessedAt: { type: string, format: date-time }
+        windowDays: { type: integer }
+        daily:
+          type: array
+          items:
+            type: object
+            required: [date, clicks]
+            properties:
+              date: { type: string, format: date }
+              clicks: { type: integer, format: int64 }
+
+    StageType:
+      type: string
+      enum:
+        - REQUIREMENT_INGESTION
+        - REQUIREMENT_ANALYSIS
+        - CLARIFICATION
+        - DECOMPOSITION
+        - IMPACT_ANALYSIS
+        - THREAT_ASSESSMENT
+        - DESIGN
+        - ARCHITECTURE_APPROVAL
+        - CHANGE_APPROVAL
+        - IMPLEMENTATION
+        - TESTING
+        - REGRESSION_TESTING
+        - SECURITY_VERIFICATION
+        - DOCUMENTATION
+        - VALIDATION
+        - COMPLIANCE_EVALUATION
+        - RELEASE_APPROVAL
+        - RELEASE
+        - FINAL_SUMMARY
+    RunStatus:
+      type: string
+      enum: [CREATED, RUNNING, AWAITING_HUMAN, PAUSED, COMPENSATING, COMPLETED, REJECTED, SAFE_STOPPED]
+    StageStatus:
+      type: string
+      enum: [PENDING, READY, RUNNING, RETRY_WAIT, AWAITING_DECISION, SUCCEEDED, SKIPPED, FAILED, COMPENSATED, CANCELLED, REMOVED]
+    Readiness:
+      type: string
+      enum: [READY, READY_WITH_ACCEPTED_LIMITATIONS, NOT_READY]
+
+    RequirementSubmission:
+      type: object
+      required: [title, narrative]
+      properties:
+        ref: { type: string, pattern: '^[A-Za-z0-9-]{1,64}$' }
+        title: { type: string, minLength: 1, maxLength: 200 }
+        narrative: { type: string, minLength: 1, maxLength: 10000 }
+        type: { type: string, enum: [NEW_CAPABILITY, CHANGE_TO_EXISTING, UNSPECIFIED], default: UNSPECIFIED }
+        acceptanceCriteria:
+          type: array
+          maxItems: 30
+          items: { type: string, maxLength: 1000 }
+        constraints:
+          type: array
+          maxItems: 30
+          items: { type: string, maxLength: 1000 }
+        simulation:
+          $ref: '#/components/schemas/SimulationOptions'
+    SimulationOptions:
+      type: object
+      description: Demonstration only; rejected unless fault injection is enabled. Every injected fault is labeled `simulated` in all evidence.
+      properties:
+        gateDeadlineSeconds: { type: integer, minimum: 1, maximum: 86400 }
+        faults:
+          type: array
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/FaultSpec'
+    FaultSpec:
+      type: object
+      required: [stage, type]
+      properties:
+        stage: { $ref: '#/components/schemas/StageType' }
+        type:
+          type: string
+          enum: [TRANSIENT_ERROR, PERMANENT_ERROR, TIMEOUT, DELAY, VERIFICATION_FAILURE, COMPENSATION_FAILURE, POLICY_FAILURE]
+        occurrences: { type: integer, minimum: 1, maximum: 10, default: 1 }
+        delayMillis: { type: integer, minimum: 0, maximum: 120000 }
+        policyId: { type: string }
+
+    RunSummary:
+      type: object
+      required: [runId, title, status, requestedBy, createdAt]
+      properties:
+        runId: { type: string, format: uuid }
+        requirementRef: { type: string }
+        title: { type: string }
+        status: { $ref: '#/components/schemas/RunStatus' }
+        requestedBy: { type: string }
+        terminalOutcome: { type: string }
+        readiness: { $ref: '#/components/schemas/Readiness' }
+        createdAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time }
+    WorkflowRun:
+      type: object
+      required: [runId, title, status, requestedBy, classification, planVersion, requirementVersion, policySetVersion, createdAt, stages, pendingActions]
+      properties:
+        runId: { type: string, format: uuid }
+        requirementRef: { type: string }
+        title: { type: string }
+        status: { $ref: '#/components/schemas/RunStatus' }
+        classification: { type: string, enum: [NEW_CAPABILITY, CHANGE_TO_EXISTING, UNDETERMINED] }
+        requestedBy: { type: string }
+        planVersion: { type: integer }
+        requirementVersion: { type: integer }
+        policySetVersion: { type: string }
+        readiness: { $ref: '#/components/schemas/Readiness' }
+        terminalOutcome: { type: string, enum: [COMPLETED, REJECTED, SAFE_STOPPED] }
+        terminalReason: { type: string }
+        manualInterventionRequired: { type: boolean }
+        simulated: { type: boolean, description: True when the run carries injected faults }
+        createdAt: { type: string, format: date-time }
+        startedAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time }
+        stages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Stage'
+        pendingActions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PendingAction'
+    Stage:
+      type: object
+      required: [key, type, status, dependsOn, generation, attempts, reused, degraded]
+      properties:
+        key: { $ref: '#/components/schemas/StageType' }
+        type: { $ref: '#/components/schemas/StageType' }
+        status: { $ref: '#/components/schemas/StageStatus' }
+        awaiting: { type: string, enum: [APPROVAL, CLARIFICATION, POLICY_EXCEPTION, CHANGE_APPROVAL] }
+        dependsOn:
+          type: array
+          items: { $ref: '#/components/schemas/StageType' }
+        generation: { type: integer }
+        attempts: { type: integer }
+        reused: { type: boolean }
+        degraded: { type: boolean }
+        skipReason: { type: string }
+        decisionDeadline: { type: string, format: date-time }
+        lastFailureClass: { type: string, enum: [TRANSIENT, PERMANENT] }
+        lastFailureReason: { type: string }
+        startedAt: { type: string, format: date-time }
+        finishedAt: { type: string, format: date-time }
+    PendingAction:
+      type: object
+      required: [stageKey, actionType, requiredRole]
+      properties:
+        stageKey: { $ref: '#/components/schemas/StageType' }
+        actionType: { type: string, enum: [APPROVAL, CLARIFICATION, POLICY_EXCEPTION, CHANGE_APPROVAL] }
+        requiredRole: { type: string, enum: [APPROVER, RELEASE_OWNER, REQUESTER] }
+        deadline: { type: string, format: date-time }
+        reviewArtifacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ArtifactRef'
+        referenceId: { type: string, description: Change request or policy exception id when applicable }
+    ArtifactRef:
+      type: object
+      required: [artifactId, type, version, fingerprint]
+      properties:
+        artifactId: { type: string, format: uuid }
+        type: { type: string }
+        version: { type: integer }
+        fingerprint: { type: string }
+
+    PlanVersion:
+      type: object
+      required: [version, trigger, reason, createdBy, createdAt, stages]
+      properties:
+        version: { type: integer }
+        trigger: { type: string, enum: [INITIAL, ANALYSIS_REFINEMENT, CLARIFICATION, CHANGE_REQUEST, CHANGE_DECISION, LATE_AMBIGUITY] }
+        reason: { type: string }
+        createdBy: { type: string }
+        createdAt: { type: string, format: date-time }
+        stages:
+          type: array
+          items:
+            type: object
+            required: [key, dependsOn, gate]
+            properties:
+              key: { $ref: '#/components/schemas/StageType' }
+              dependsOn:
+                type: array
+                items: { $ref: '#/components/schemas/StageType' }
+              gate: { type: boolean }
+              condition: { type: string }
+        diff:
+          $ref: '#/components/schemas/PlanDiff'
+    PlanDiff:
+      type: object
+      properties:
+        added: { type: array, items: { type: string } }
+        removed: { type: array, items: { type: string } }
+        invalidated: { type: array, items: { type: string } }
+        dependencyChanges: { type: array, items: { type: string } }
+
+    RequirementVersion:
+      type: object
+      required: [version, source, fingerprint, createdBy, createdAt, content]
+      properties:
+        version: { type: integer }
+        source: { type: string, enum: [SUBMITTED, CLARIFIED, CHANGE_REQUEST] }
+        fingerprint: { type: string }
+        createdBy: { type: string }
+        createdAt: { type: string, format: date-time }
+        decisionId: { type: string, format: uuid }
+        content: { type: string, description: JSON requirement document (see schemas/requirement-document.schema.json) }
+
+    ArtifactSummary:
+      type: object
+      required: [artifactId, type, version, stageKey, generation, mediaType, fingerprint, producedBy, superseded, createdAt]
+      properties:
+        artifactId: { type: string, format: uuid }
+        type: { type: string }
+        version: { type: integer }
+        stageKey: { $ref: '#/components/schemas/StageType' }
+        generation: { type: integer }
+        mediaType: { type: string }
+        fingerprint: { type: string }
+        producedBy: { type: string }
+        superseded: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    ArtifactDetail:
+      allOf:
+        - $ref: '#/components/schemas/ArtifactSummary'
+        - type: object
+          required: [content, inputs, lineage]
+          properties:
+            content: { type: string }
+            inputs:
+              type: array
+              items:
+                $ref: '#/components/schemas/ArtifactRef'
+            lineage:
+              type: array
+              description: Decisions that influenced this artifact through its inputs
+              items:
+                $ref: '#/components/schemas/Decision'
+
+    Decision:
+      type: object
+      required: [decisionId, type, outcome, actorType, actorId, valid, createdAt]
+      properties:
+        decisionId: { type: string, format: uuid }
+        type: { type: string, enum: [GATE, CLARIFICATION_ANSWER, CHANGE_REQUEST, CHANGE_DECISION, EXCEPTION_REQUEST, EXCEPTION_DECISION, FALLBACK_USED, REPLAN, OPERATOR_ACTION, SAFE_STOP] }
+        outcome: { type: string }
+        stageKey: { $ref: '#/components/schemas/StageType' }
+        actorType: { type: string, enum: [HUMAN, AGENT, SYSTEM] }
+        actorId: { type: string }
+        actorRole: { type: string }
+        rationale: { type: string }
+        boundFingerprints:
+          type: object
+          additionalProperties: { type: string }
+        payload: { type: string }
+        valid: { type: boolean }
+        invalidatedReason: { type: string }
+        createdAt: { type: string, format: date-time }
+    GateDecisionRequest:
+      type: object
+      required: [decision, rationale]
+      properties:
+        decision: { type: string, enum: [APPROVE, REJECT] }
+        rationale: { type: string, minLength: 3, maxLength: 2000 }
+
+    ClarificationAnswers:
+      type: object
+      required: [answers, rationale]
+      properties:
+        answers:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [questionId]
+            properties:
+              questionId: { type: string }
+              optionId: { type: string }
+              answer: { type: string, maxLength: 1000 }
+        rationale: { type: string, minLength: 3, maxLength: 2000 }
+    ClarificationResult:
+      type: object
+      required: [requirementVersion, planVersion, decisions]
+      properties:
+        requirementVersion: { type: integer }
+        planVersion: { type: integer }
+        decisions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Decision'
+
+    ChangeRequestSubmission:
+      type: object
+      required: [amendment, reason]
+      properties:
+        amendment:
+          $ref: '#/components/schemas/RequirementSubmission'
+        reason: { type: string, minLength: 3, maxLength: 1000 }
+    ChangeRequest:
+      type: object
+      required: [changeRequestId, status, material, requestedBy, requestedAt, impact]
+      properties:
+        changeRequestId: { type: string, format: uuid }
+        status: { type: string, enum: [PENDING_APPROVAL, APPLIED, REJECTED] }
+        material: { type: boolean }
+        requestedBy: { type: string }
+        requestedAt: { type: string, format: date-time }
+        reason: { type: string }
+        impact:
+          type: object
+          properties:
+            affectedStages: { type: array, items: { type: string } }
+            invalidatedApprovals: { type: array, items: { type: string } }
+            materialReasons: { type: array, items: { type: string } }
+        decidedBy: { type: string }
+        decidedAt: { type: string, format: date-time }
+
+    PolicyExceptionRequest:
+      type: object
+      required: [policyId, reason, scope, compensatingControl, expiresAt]
+      properties:
+        policyId: { type: string }
+        reason: { type: string, minLength: 3, maxLength: 1000 }
+        scope: { type: string, minLength: 3, maxLength: 500 }
+        compensatingControl: { type: string, minLength: 3, maxLength: 1000 }
+        expiresAt: { type: string, format: date-time }
+    PolicyException:
+      type: object
+      required: [exceptionId, policyId, status, reason, scope, compensatingControl, requestedBy, requestedAt, expiresAt]
+      properties:
+        exceptionId: { type: string, format: uuid }
+        policyId: { type: string }
+        status: { type: string, enum: [PENDING, APPROVED, REJECTED] }
+        reason: { type: string }
+        scope: { type: string }
+        compensatingControl: { type: string }
+        requestedBy: { type: string }
+        requestedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        decidedBy: { type: string }
+        decidedAt: { type: string, format: date-time }
+        decisionRationale: { type: string }
+    PolicyEvaluation:
+      type: object
+      required: [policyId, policySetVersion, severity, outcome, evidence, stageKey, evaluatedAt, simulated]
+      properties:
+        policyId: { type: string }
+        title: { type: string }
+        domain: { type: string }
+        policySetVersion: { type: string }
+        severity: { type: string, enum: [MANDATORY, ADVISORY] }
+        outcome: { type: string, enum: [PASS, FAIL, EXCEPTION_REQUESTED, NOT_APPLICABLE] }
+        evidence: { type: string }
+        stageKey: { $ref: '#/components/schemas/StageType' }
+        generation: { type: integer }
+        exceptionId: { type: string, format: uuid }
+        simulated: { type: boolean }
+        evaluatedAt: { type: string, format: date-time }
+    PolicySet:
+      type: object
+      required: [version, policies]
+      properties:
+        version: { type: string }
+        policies:
+          type: array
+          items:
+            type: object
+            required: [id, title, domain, severity]
+            properties:
+              id: { type: string }
+              title: { type: string }
+              domain: { type: string, enum: [SECURITY, PRIVACY, COMPLIANCE, LICENSING, TESTING, DOCUMENTATION, CHANGE_CONTROL, RELEASE] }
+              severity: { type: string, enum: [MANDATORY, ADVISORY] }
+              description: { type: string }
+
+    OperatorActionRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 3, maxLength: 1000 }
+
+    TimelineEntry:
+      type: object
+      required: [stageKey, generation, attemptNo, agentId, fallback, startedAt]
+      properties:
+        stageKey: { $ref: '#/components/schemas/StageType' }
+        generation: { type: integer }
+        attemptNo: { type: integer }
+        agentId: { type: string }
+        fallback: { type: boolean }
+        simulatedFault: { type: string }
+        startedAt: { type: string, format: date-time }
+        finishedAt: { type: string, format: date-time }
+        durationMillis: { type: integer, format: int64 }
+        outcome: { type: string }
+        failureClass: { type: string }
+        error: { type: string }
+
+    AuditEvent:
+      type: object
+      required: [chainId, seq, occurredAt, actorType, actorId, action, result, prevHash, hash]
+      properties:
+        chainId: { type: string }
+        seq: { type: integer, format: int64 }
+        occurredAt: { type: string, format: date-time }
+        actorType: { type: string, enum: [HUMAN, AGENT, SYSTEM] }
+        actorId: { type: string }
+        action: { type: string }
+        target: { type: string }
+        fromState: { type: string }
+        toState: { type: string }
+        result: { type: string }
+        reason: { type: string }
+        details: { type: string }
+        prevHash: { type: string }
+        hash: { type: string }
+    AuditVerification:
+      type: object
+      required: [chainId, valid, eventsChecked, verifiedAt, message]
+      properties:
+        chainId: { type: string }
+        valid: { type: boolean }
+        eventsChecked: { type: integer }
+        firstBrokenSeq: { type: integer, format: int64 }
+        verifiedAt: { type: string, format: date-time }
+        message: { type: string }
+
+    Capability:
+      type: object
+      required: [capabilityId, released]
+      properties:
+        capabilityId: { type: string }
+        released: { type: boolean }
+        parameters:
+          type: object
+          additionalProperties: true
+        changedBy: { type: string }
+        changedByRun: { type: string, format: uuid }
+        changedAt: { type: string, format: date-time }
+        reason: { type: string }
+
+    ReliabilityReport:
+      type: object
+      required: [generatedAt, label, population, runs, stages, compensations, mttr, unrecoveredFailures, exclusions, latency, limitations]
+      properties:
+        generatedAt: { type: string, format: date-time }
+        label: { type: string, example: 'DEMONSTRATION DATA - not production statistics' }
+        population:
+          type: object
+          required: [runsConsidered, terminalRuns, activeRuns]
+          properties:
+            runsConsidered: { type: integer }
+            terminalRuns: { type: integer }
+            activeRuns: { type: integer }
+            simulatedRuns: { type: integer }
+        runs:
+          type: object
+          required: [completed, rejected, safeStopped, successRate, failureRate]
+          properties:
+            completed: { type: integer }
+            rejected: { type: integer }
+            safeStopped: { type: integer }
+            successRate: { type: number }
+            failureRate: { type: number }
+        stages:
+          type: object
+          required: [attempts, retries, retryFrequency, fallbacks]
+          properties:
+            attempts: { type: integer }
+            retries: { type: integer }
+            retryFrequency: { type: number }
+            fallbacks: { type: integer }
+        compensations:
+          type: object
+          required: [runsWithCompensation, compensationFrequency, rollbacks]
+          properties:
+            runsWithCompensation: { type: integer }
+            compensationFrequency: { type: number }
+            rollbacks: { type: integer }
+        mttr:
+          type: object
+          required: [recoveredEvents, totalRecoveryMillis, recoveryDurationsMillis, formula]
+          properties:
+            recoveredEvents: { type: integer }
+            totalRecoveryMillis: { type: integer, format: int64 }
+            mttrMillis: { type: number }
+            recoveryDurationsMillis:
+              type: array
+              items: { type: integer, format: int64 }
+            byMechanism:
+              type: object
+              additionalProperties: { type: integer }
+            formula: { type: string }
+        unrecoveredFailures:
+          type: object
+          required: [count, events]
+          properties:
+            count: { type: integer }
+            events:
+              type: array
+              items:
+                type: object
+                properties:
+                  runId: { type: string, format: uuid }
+                  stageKey: { type: string }
+                  cause: { type: string }
+                  simulated: { type: boolean }
+                  detectedAt: { type: string, format: date-time }
+        exclusions:
+          type: array
+          items:
+            type: object
+            required: [reason, count]
+            properties:
+              reason: { type: string }
+              count: { type: integer }
+        latency:
+          type: object
+          required: [sampleSize, excludesHumanWait]
+          properties:
+            sampleSize: { type: integer }
+            minMillis: { type: integer, format: int64 }
+            p50Millis: { type: integer, format: int64 }
+            p95Millis: { type: integer, format: int64 }
+            maxMillis: { type: integer, format: int64 }
+            excludesHumanWait: { type: boolean }
+        limitations:
+          type: array
+          items: { type: string }

@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agentic-sdlc:schema:validation-report:1.0.0",
+  "title": "ValidationReport",
+  "description": "Output of VALIDATION (synchronization stage): consolidated results of all verification branches.",
+  "type": "object",
+  "required": ["passed", "criteria", "suites", "documentation", "degradedStages"],
+  "additionalProperties": false,
+  "properties": {
+    "passed": { "type": "boolean" },
+    "criteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "verifiedBy", "passed"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "verifiedBy": { "type": "array", "items": { "type": "string" } },
+          "passed": { "type": "boolean" }
+        }
+      }
+    },
+    "suites": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["suite", "passed", "failed"],
+        "additionalProperties": false,
+        "properties": {
+          "suite": { "type": "string" },
+          "passed": { "type": "integer" },
+          "failed": { "type": "integer" }
+        }
+      }
+    },
+    "documentation": {
+      "type": "object",
+      "required": ["generated", "repositoryDocsUpdated", "evidence"],
+      "additionalProperties": false,
+      "properties": {
+        "generated": { "type": "boolean" },
+        "repositoryDocsUpdated": { "type": ["boolean", "null"] },
+        "evidence": { "type": "string" }
+      }
+    },
+    "degradedStages": { "type": "array", "items": { "type": "string" } }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agentic-sdlc:schema:readiness-report:1.0.0",
+  "title": "ReadinessReport",
+  "description": "Release-readiness outcome presented at RELEASE_APPROVAL and re-evaluated at decision time (FR-RDY-01/02).",
+  "type": "object",
+  "required": ["outcome", "reasons", "limitations", "evaluatedAt"],
+  "additionalProperties": false,
+  "properties": {
+    "outcome": { "enum": ["READY", "READY_WITH_ACCEPTED_LIMITATIONS", "NOT_READY"] },
+    "reasons": { "type": "array", "items": { "type": "string" } },
+    "limitations": { "type": "array", "items": { "type": "string" } },
+    "evaluatedAt": { "type": "string" }
+  }
+}

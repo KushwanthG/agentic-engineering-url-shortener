@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agentic-sdlc:schema:design:1.0.0",
+  "title": "Design",
+  "description": "Output of DESIGN: component, API, and schema impact; release and rollback plan; materiality (drives ARCHITECTURE_APPROVAL).",
+  "type": "object",
+  "required": ["capabilities", "components", "apiChanges", "schemaChanges", "releasePlan", "rollbackPlan", "materialChange", "materialReasons", "decisions", "risks"],
+  "additionalProperties": false,
+  "properties": {
+    "capabilities": { "type": "array", "items": { "type": "string" } },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "responsibility", "change"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "responsibility": { "type": "string" },
+          "change": { "enum": ["NEW", "MODIFIED", "UNCHANGED"] }
+        }
+      }
+    },
+    "apiChanges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["operation", "change", "compatibility", "contractVersion"],
+        "additionalProperties": false,
+        "properties": {
+          "operation": { "type": "string" },
+          "change": { "type": "string" },
+          "compatibility": { "enum": ["BACKWARD_COMPATIBLE", "BREAKING", "BEHAVIOR_ONLY"] },
+          "contractVersion": { "type": "string" }
+        }
+      }
+    },
+    "schemaChanges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["migration", "change", "compatibility"],
+        "additionalProperties": false,
+        "properties": {
+          "migration": { "type": "string" },
+          "change": { "type": "string" },
+          "compatibility": { "enum": ["ADDITIVE", "BREAKING"] }
+        }
+      }
+    },
+    "releasePlan": {
+      "type": "object",
+      "required": ["capability", "strategy", "parameters"],
+      "additionalProperties": false,
+      "properties": {
+        "capability": { "type": "string" },
+        "strategy": { "type": "string" },
+        "parameters": { "type": "object" }
+      }
+    },
+    "rollbackPlan": { "type": "string" },
+    "materialChange": { "type": "boolean" },
+    "materialReasons": { "type": "array", "items": { "type": "string" } },
+    "decisions": { "type": "array", "items": { "type": "string" } },
+    "risks": { "type": "array", "items": { "type": "string" } }
+  }
+}

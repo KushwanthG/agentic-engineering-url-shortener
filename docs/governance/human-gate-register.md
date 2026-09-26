@@ -34,8 +34,11 @@ and, as a technology directive:
 
 > "I have installed jdk 21... please use java 21 version in the project"
 
+> "make sure you use h2 database runtime"
+
 These are the candidate's own decisions and are treated as approved inputs: **Spring Boot** as
-the framework (first instruction) and **Java 21** as the language level (third instruction). The
+the framework (first instruction), **Java 21** as the language level (third instruction), and
+**H2 as the runtime database** (fourth instruction; declared with Maven `runtime` scope). The
 specific Spring Boot version and every other technology choice remain assistant proposals, pending
 G4.
 

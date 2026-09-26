@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agentic-sdlc:schema:impact-analysis:1.0.0",
+  "title": "ImpactAnalysis",
+  "description": "Output of IMPACT_ANALYSIS for changes to existing behavior (FR-ORC-14).",
+  "type": "object",
+  "required": ["method", "degraded", "seeds", "components", "interfaces", "dataFlows", "tests", "documentation", "regressionRisks", "rollout", "rollback", "impactedRequirements"],
+  "additionalProperties": false,
+  "properties": {
+    "method": { "enum": ["SOURCE_SCAN", "CATALOG_ONLY"] },
+    "degraded": { "type": "boolean" },
+    "seeds": { "type": "array", "items": { "type": "string" } },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "path", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "path": { "type": ["string", "null"] },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "interfaces": { "type": "array", "items": { "type": "string" } },
+    "dataFlows": { "type": "array", "items": { "type": "string" } },
+    "tests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "path"],
+        "additionalProperties": false,
+        "properties": { "name": { "type": "string" }, "path": { "type": ["string", "null"] } }
+      }
+    },
+    "documentation": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "reason"],
+        "additionalProperties": false,
+        "properties": { "path": { "type": "string" }, "reason": { "type": "string" } }
+      }
+    },
+    "regressionRisks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "description", "severity", "mitigation"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "description": { "type": "string" },
+          "severity": { "enum": ["HIGH", "MEDIUM", "LOW"] },
+          "mitigation": { "type": "string" }
+        }
+      }
+    },
+    "rollout": { "type": "string" },
+    "rollback": { "type": "string" },
+    "impactedRequirements": { "type": "array", "items": { "type": "string" } }
+  }
+}

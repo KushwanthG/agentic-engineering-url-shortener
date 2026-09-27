@@ -12,10 +12,6 @@ built with GitHub SpecKit spec-driven development, Spring Boot 4.1.1, Java 21, a
 > orchestration, retry and fallback, safe-stop, and re-planning. The agents do not reason freely.
 > See [ADR-017](docs/adr/ADR-017-deterministic-agents.md).
 
-> **Status: not yet submitted.** Every human gate (G1–G7) is `PENDING RATIFICATION` or not yet
-> reached, and every ADR is `Proposed`. Only the candidate can ratify them
-> ([gate register](docs/governance/human-gate-register.md)). The release-readiness proposal is
-> [release-readiness.md](docs/assessment/release-readiness.md).
 
 ## Quick start
 

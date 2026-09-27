@@ -122,15 +122,6 @@ release happens after a mandatory policy failure without an approved exception
 | Testing approach, limitations, trade-offs | [testing-limitations-tradeoffs.md](docs/assessment/testing-limitations-tradeoffs.md), [risk register](docs/assessment/risk-register.md) |
 | Final summary and reviewer guide | [final-engineering-summary.md](docs/assessment/final-engineering-summary.md), [reviewer-guide.md](docs/assessment/reviewer-guide.md) |
 
-## Known limitations (short list)
-
-The full list is in [testing-limitations-tradeoffs.md](docs/assessment/testing-limitations-tradeoffs.md).
-
-- **Deferred requirements.** FR-ORC-18 (autonomy budget, T074) and FR-RPL-06 (ambiguity found
-  mid-run, T096) are **not implemented**; they were deferred under scope decision SD-1.
-- **Performance.** The redirect and creation p95 targets (PVT-19 and PVT-20) were not reliably met
-  in the local measurement.
-- **Single process.** Locks, scheduling, and the H2 file database run in one process.
 
 ## Contributing
 

@@ -302,3 +302,19 @@ demo log. The run appended T133–T136.
 |------|---------|---------|-----------|
 | T133, T135 | `StartupLogSecurityTest` (2): starts the real application in the default and demo profiles and captures the output | 2 tests, 2 failures: `not to contain (ignoring case): "generated security password"` (both profiles). The demo-warning assertion was not reached | Green after two changes: an empty `UserDetailsService` bean (bearer tokens are the only authentication), and `DemoProfileWarning` (demo profile only). Run together with `SecurityMatrixTest`, `GovernanceSecurityMatrixTest`, `ArchitectureTest` |
 | T136 | N/A (documentation) | — | `quickstart.md` corrected for D-1 to D-3 of `quickstart-validation.md` |
+
+## T128 completed — dependency vulnerability scan (2026-09-27)
+
+At Phase 10a, T128 was recorded as not run because the scanner was not installed. It was completed
+later with the candidate's approval to download the scanner.
+
+| Step | Command | Observed |
+|------|---------|----------|
+| Scanner | OSV-Scanner v2.6.0 from the official GitHub release | SHA256 matched `osv-scanner_SHA256SUMS` |
+| First scan | `osv-scanner scan source -L target/classes/META-INF/sbom/application.cdx.json` (SBOM of `2ba5823`, 104 packages) | exit 1: **3 CRITICAL** advisories in `tomcat-embed-core` 11.0.24 (CVE-2026-65905, CVE-2026-65182, CVE-2026-68525) |
+| Remediation | `pom.xml`: `<tomcat.version>11.0.26</tomcat.version>`, then `mvnw -B -ntp clean verify` | 530 tests, 0 failures, BUILD SUCCESS; the SBOM lists Tomcat 11.0.26 |
+| Re-scan | same command | **"No issues found"** |
+
+**Decision history.** An intermediate attempt to descope T128 and revert the upgrade was reversed
+by the candidate: "please implement t128.. i dont want to chagne the constitution". The candidate
+then chose the upgrade over accepting the findings.

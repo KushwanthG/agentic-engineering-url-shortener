@@ -44,7 +44,6 @@ walking skeleton.
 
 **Not demonstrated or not run:**
 - **NFR-PRF-01.** The latency targets were not reliably met ([performance.md](performance.md)).
-- **Dependency vulnerabilities (T128, descoped).** One scan found 3 CRITICAL Tomcat advisories; they are not remediated ([security-scans.md](security-scans.md)).
 - **Deferred tasks (SD-1):**
   - JaCoCo coverage gate (T115). The report is produced; the ≥ 80% threshold is not enforced.
   - Extensibility test (T114).

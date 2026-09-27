@@ -14,7 +14,7 @@
 |---|---|---|---|---|---|---|
 | R-01 | Unimplemented FR MUSTs: FR-ORC-18 (autonomy budget, T074) and FR-RPL-06 (ambiguity found mid-run, T096) | H | M | Deferred under SD-1 and shown as DEFERRED by `TraceabilityMatrixTest`; the candidate decides at G6 | **Open** | M |
 | R-02 | Performance targets not met (PVT-19, PVT-20) | H | M | Measured and documented ([performance.md](performance.md)); likely cause is R-18 | **Open** | M |
-| R-03 | Known CRITICAL advisories in the embedded Tomcat 11.0.24 (CVE-2026-65905, -65182, -68525) | L | H | Not reachable by analysis (no DIGEST or FORM auth, no servlet constraints); fix is Tomcat ≥ 11.0.25; not applied because T128 was descoped by the candidate ([security-scans.md §2](security-scans.md)) | **Open** (acceptance at G6) | M |
+| R-03 | Known vulnerabilities in dependencies | L | H | OSV-Scanner scan (T128): 3 CRITICAL advisories in Tomcat 11.0.24, fixed by the 11.0.26 override; re-scan clean ([security-scans.md §2](security-scans.md)). The override must be revisited on Spring Boot upgrades | Mitigated | M |
 | R-04 | Human gates G1–G7 and all ADRs are unratified; implementation proceeded provisionally | H | H | Delegated provisional progression is recorded in the gate register; nothing is marked approved | **Open** (the candidate's action) | H until ratified |
 | R-05 | Overclaiming in the documents (for example, describing unbuilt behavior) | M | H | Claims cite evidence. One overclaim was found and corrected (SCN-A mid-run ambiguity, Phase 10) | Partial | L |
 | R-06 | Simulated human input mistaken for the candidate's decisions | M | H | Labeled "simulated human input" in tests, evidence provenance (`simulatedInput: true`), and scenario docs; live walkthroughs documented | Mitigated | L |
@@ -58,12 +58,12 @@
 | R-34 | T8: audit tampering | L | H | Hash chain and verification (`AuditTamperDetectionTest`) | Mitigated (see R-19) |
 | R-35 | T9: secrets in logs, artifacts, or the repository | L | H | Hashed tokens, SEC-002, `TokenNotLoggedTest`, `RepositorySecretScanTest` | Mitigated |
 | R-36 | T10: resource exhaustion | M | M | Bounded pool, rate limits, request limits. **No autonomy budget** (R-01) | Partial |
-| R-37 | T11: vulnerable dependencies | M | H | SBOM, LIC-001, and one OSV scan (R-03). No scanning in CI | Open |
+| R-37 | T11: vulnerable dependencies | M | H | SBOM, LIC-001, and the OSV scan with remediation (R-03). No scanning in CI yet (BL-03) | Partial |
 | R-38 | T12: fault injection or preview in production | L | H | Disabled by default; in-process only (`SecurityMatrixTest`) | Mitigated |
 | R-39 | T13: SQL injection | L | H | Parameterized queries only | Mitigated (review) |
 
 ## 4. Summary of residual risk
 
-The **open** items (R-01, R-02, R-03, R-04, R-23, R-37) are the input to the release-readiness
+The **open** items (R-01, R-02, R-04, R-23) and the partial R-37 are the input to the release-readiness
 proposal ([release-readiness.md](release-readiness.md)). They keep the proposal at **NOT READY**
 until the candidate either accepts each one as a limitation at G6 or resolves it.

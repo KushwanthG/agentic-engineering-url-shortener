@@ -350,3 +350,15 @@ security rules unchanged (deny-by-default; redirect route public by design); all
 | 16 | Commit message | `docs(assessment): add quickstart validation, convergence report, readiness proposal, final summary, and reviewer guide` |
 | 17 | Next | the candidate: review the gate register; decide T074, T096, T128, and T134; G6 (T125) and G7 (T126) |
 | 18 | Human approval required | G1–G7, all ADRs, and every pending entry in the gate register |
+
+---
+
+## Checkpoint: T128 — dependency vulnerability scan and remediation
+
+| # | Item | Record |
+|---|------|--------|
+| 1 | Completed tasks | T128 (constitution V: release readiness includes a dependency-risk check) |
+| 4 | Files created or changed | `pom.xml` (`tomcat.version` override to 11.0.26); `docs/assessment/security-scans.md` §2; README, SECURITY, `release-readiness.md` (O-3 removed and later items renumbered), `risk-register.md` (R-03 mitigated, R-37 partial), `final-engineering-summary.md`, `convergence-report.md`, `reviewer-guide.md`, gate register |
+| 7 | Validation commands executed | OSV-Scanner v2.6.0 (checksum-verified) → 3 CRITICAL Tomcat 11.0.24 advisories; after the upgrade, `mvnw -B -ntp clean verify` → 530 tests, 0 failures; re-scan → no issues |
+| 11 | Deviations | **Dependency change.** Overriding a Spring Boot-managed version (Tomcat) departs from ADR-002's "Boot-managed versions" approach. It is recorded for the candidate's review, and must be revisited when Spring Boot is upgraded |
+| 18 | Human approval required | review of the Tomcat override (gate register, T128 row) |

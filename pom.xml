@@ -24,6 +24,9 @@
         <archunit.version>1.5.1</archunit.version>
         <openapi-request-validator.version>3.0.0</openapi-request-validator.version>
         <jacoco.version>0.8.15</jacoco.version>
+        <!-- T128: overrides Boot 4.1.1's managed Tomcat 11.0.24, which is affected by CVE-2026-65905,
+             CVE-2026-65182 and CVE-2026-68525 (fixed in 11.0.25). See docs/assessment/security-scans.md. -->
+        <tomcat.version>11.0.26</tomcat.version>
     </properties>
 
     <dependencies>

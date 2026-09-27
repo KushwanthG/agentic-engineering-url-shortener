@@ -41,39 +41,48 @@ entry that no longer matches fails the test:
 secret, and it does not scan git history. The history is short and local, and no secret was ever
 committed to it by this workflow.
 
-## 2. Dependency vulnerability scan (T128, NFR-SEC-05): run once; findings accepted, not remediated
+## 2. Dependency vulnerability scan (T128, NFR-SEC-05): executed; all findings fixed by upgrade
 
-**Scope decision.** On 2026-09-27 the candidate removed T128 from the assignment's scope:
-"dont override the tomcat as its too much for assignment... remove that T128 from task". The scan
-had already been run once. Its results are recorded below, as found, so that nothing is hidden.
+**Tool.** OSV-Scanner **v2.6.0** (commit `e840a6e`), downloaded from the official GitHub release.
+Its SHA256 matched the published `osv-scanner_SHA256SUMS`.
 
-**Command and tool.** OSV-Scanner **v2.6.0** (commit `e840a6e`), downloaded from the official
-GitHub release; its SHA256 matched the published `osv-scanner_SHA256SUMS`. It scanned the CycloneDX
-1.6 SBOM of commit `2ba5823` (104 components) on 2026-09-27:
+**Command** (run after an online `mvnw clean verify`, which writes the SBOM):
 
 ```powershell
 osv-scanner scan source -L target/classes/META-INF/sbom/application.cdx.json --format table
 ```
 
-**Result.** 1 package is affected by **3 known vulnerabilities, all rated CRITICAL**, and no other
-findings:
+### First scan (2026-09-27, commit `2ba5823`, CycloneDX 1.6 SBOM, 104 components)
 
-| Advisory | CVSS | Component | Issue | Reachability in this application |
-|---|---|---|---|---|
-| GHSA-9xv2-5v5q-p794 / CVE-2026-65905 | 9.8 | `tomcat-embed-core` 11.0.24 (managed by Spring Boot 4.1.1) | Replay attack in Tomcat's **DIGEST** authenticator | **Not reachable (by analysis).** No Tomcat authenticator or realm is configured; authentication is the Spring Security bearer-token filter |
-| GHSA-gcx9-497g-6cp6 / CVE-2026-65182 | 9.1 | same | Bypass of servlet `<security-constraint>` ordering | **Not reachable (by analysis).** There are no servlet security constraints; Spring Security's filter chain does all authorization |
-| GHSA-h3x4-894j-xpx5 / CVE-2026-68525 | 9.1 | same | Bypass in Tomcat **FORM** authentication | **Not reachable (by analysis).** FORM login is disabled (`formLogin(...disable())` in `SecurityConfig`) |
+The scan found **3 known vulnerabilities, all CRITICAL, all in one package**:
 
-**What the scanner reported and what is known.**
-- The scanner printed no fixed version (`--`).
-- The advisories themselves name **Tomcat 11.0.25** as the fix, and Maven Central also has 11.0.26.
-- Setting `<tomcat.version>11.0.26</tomcat.version>` was tried: it built green (530 tests) and the
-  SBOM showed 11.0.26. The change was **reverted** at the candidate's request and is **not** in the
-  repository.
+| Advisory | CVSS | Component | Issue | Reachability | Disposition |
+|---|---|---|---|---|---|
+| GHSA-9xv2-5v5q-p794 / CVE-2026-65905 | 9.8 | `tomcat-embed-core` 11.0.24 (managed by Spring Boot 4.1.1) | Replay attack in Tomcat's DIGEST authenticator | Not reachable by analysis: authentication is the Spring Security bearer-token filter, with no Tomcat authenticator | **Upgrade** |
+| GHSA-gcx9-497g-6cp6 / CVE-2026-65182 | 9.1 | same | Bypass of servlet `<security-constraint>` ordering | Not reachable by analysis: there are no servlet security constraints | **Upgrade** |
+| GHSA-h3x4-894j-xpx5 / CVE-2026-68525 | 9.1 | same | Bypass in Tomcat FORM authentication | Not reachable by analysis: FORM login is disabled | **Upgrade** |
 
-**Disposition: accepted by the candidate, not remediated.**
-- The reachability conclusions come from reading the configuration; no test proves them.
-- Constitution V requires dependency-risk checks before release. The check ran. Shipping with known
-  CRITICAL advisories is a risk that only the candidate can accept, at gate G6.
-- **Production recommendation:** override `tomcat.version` to ≥ 11.0.25, or move to a Spring Boot
-  patch release that manages a fixed Tomcat, and scan in CI.
+- **Fix available.** The advisories name Tomcat **11.0.25** as the fix. The scanner itself printed
+  `--` for the fixed version.
+- **Why upgrade anyway.** Reachability rests on reading the configuration, not on a test. So even
+  though none of the three looked reachable, all three were fixed by upgrading instead of being
+  accepted.
+
+### Remediation
+
+- **Change.** `pom.xml` sets `<tomcat.version>11.0.26</tomcat.version>`, the latest patch of the
+  11.0 line on Maven Central. This overrides the Tomcat version managed by Spring Boot 4.1.1.
+- **Build check.** `mvnw -B -ntp clean verify` passed: **530 tests, 0 failures**. The SBOM lists
+  `tomcat-embed-core`, `tomcat-embed-el`, and `tomcat-embed-websocket` at 11.0.26.
+- **Maintenance note.** The override must be removed or raised when Spring Boot is upgraded to a
+  release that manages Tomcat ≥ 11.0.25.
+
+### Re-scan after the upgrade (2026-09-27)
+
+The same command over the new SBOM (104 packages) printed **"No issues found"**. There are no
+remaining findings, so no exception is needed at G6.
+
+**Limits.**
+- The scan reflects the OSV database on 2026-09-27. New advisories may appear later, so re-run it
+  before any release.
+- It covers the dependencies listed in the SBOM (104 components), not the Maven build plugins.

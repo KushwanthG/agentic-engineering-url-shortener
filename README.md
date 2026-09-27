@@ -116,8 +116,6 @@ The full list is in [testing-limitations-tradeoffs.md](docs/assessment/testing-l
   mid-run, T096) are **not implemented**; they were deferred under scope decision SD-1.
 - **Performance.** The redirect and creation p95 targets (PVT-19 and PVT-20) were not reliably met
   in the local measurement.
-- **Dependency scan.** OSV-Scanner found 3 CRITICAL advisories in Tomcat 11.0.24. By analysis they are not reachable here, and they are not fixed: T128 was removed from scope.
-  See [security-scans.md §2](docs/assessment/security-scans.md).
 - **Single process.** Locks, scheduling, and the H2 file database run in one process.
 
 ## Contributing

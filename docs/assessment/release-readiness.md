@@ -20,12 +20,11 @@ accepted exception. Both conditions hold today:
 |---|---|---|---|
 | O-1 | FR-ORC-18 autonomy budget not implemented (T074, SD-1) | `TraceabilityMatrixTest` DEFERRED list; [risk R-01](risk-register.md) | implement T074, or accept the limitation at G6 |
 | O-2 | FR-RPL-06 ambiguity found mid-run not implemented (T096, SD-1) | same | implement T096, or accept the limitation |
-| O-3 | Dependency scan: 3 CRITICAL advisories in Tomcat 11.0.24, not reachable by analysis and not remediated (T128 descoped by the candidate; NFR-SEC-05, constitution V) | [security-scans.md §2](security-scans.md) | explicit acceptance at G6 (or upgrade Tomcat to ≥ 11.0.25) |
-| O-4 | Performance targets PVT-19 and PVT-20 not met (NFR-PRF-01, T134 open) | [performance.md](performance.md) | accept as a demonstration limitation, or complete T134 |
-| O-5 | Deviations awaiting review in the gate register (Phase 4 to Phase 10a) | [gate register](../governance/human-gate-register.md), lower table | review and decide each |
+| O-3 | Performance targets PVT-19 and PVT-20 not met (NFR-PRF-01, T134 open) | [performance.md](performance.md) | accept as a demonstration limitation, or complete T134 |
+| O-4 | Deviations awaiting review in the gate register (Phase 4 to Phase 10a) | [gate register](../governance/human-gate-register.md), lower table | review and decide each |
 
-If the candidate ratifies G1–G5, accepts O-1, O-2, O-3, and O-4 as limitations, and
-decides O-5, the proposal would become **READY WITH ACCEPTED LIMITATIONS**. It cannot become READY
+If the candidate ratifies G1–G5, accepts O-1, O-2, and O-3 as limitations, and
+decides O-4, the proposal would become **READY WITH ACCEPTED LIMITATIONS**. It cannot become READY
 while O-1 and O-2 are open, because they are specification MUSTs.
 
 ## Mandatory validation status
@@ -41,7 +40,7 @@ while O-1 and O-2 are open, because they are specification MUSTs.
 | Line coverage (NFR-TST-01, PVT-23 ≥ 80%) | JaCoCo report | 95.0% overall; 88.9–96.9% in the named packages. **Measured, not enforced** (T115 deferred) |
 | Repository secret scan | `RepositorySecretScanTest` | pass; 0 unexplained findings |
 | Startup log credential check | `StartupLogSecurityTest` | pass (after convergence fix T133) |
-| Dependency vulnerability scan | `osv-scanner scan source -L …/application.cdx.json` (v2.6.0) | **3 CRITICAL** (Tomcat 11.0.24), not remediated (O-3) |
+| Dependency vulnerability scan (T128) | `osv-scanner scan source -L …/application.cdx.json` (v2.6.0) | 3 CRITICAL found in Tomcat 11.0.24 → fixed by upgrading to 11.0.26 → re-scan: **no issues** |
 
 ## Policy and change-control results
 

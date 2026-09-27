@@ -63,7 +63,7 @@ class GovernanceInvariantsTest {
 
     private static List<AuditEntry> validAudit() {
         return List.of(
-                transition(1, "CLARIFICATION", "READY", "SKIPPED"),
+                transition(1, "CLARIFICATION", "PENDING", "SKIPPED"),
                 attempt(2, "DESIGN"),
                 transition(3, "ARCHITECTURE_APPROVAL", "READY", "AWAITING_DECISION"),
                 transition(4, "ARCHITECTURE_APPROVAL", "AWAITING_DECISION", "SUCCEEDED"),
@@ -134,13 +134,34 @@ class GovernanceInvariantsTest {
     }
 
     @Test
-    void onlyTheConditionalClarificationGateMayBeSkipped() {
+    void onlyConditionalGatesMayBeSkippedAndOnlyBeforeTheyAwaitADecision() {
         RunEvidence skippedRelease = withAudit(valid(), audit -> {
             audit.set(7, transition(8, "RELEASE_APPROVAL", "AWAITING_DECISION", "SKIPPED"));
             return audit;
         });
         assertThat(GovernanceInvariants.violations(skippedRelease))
                 .anyMatch(v -> v.startsWith("gate order: RELEASE") && v.contains("RELEASE_APPROVAL was SKIPPED"));
+
+        // a non-material design skips the architecture gate by condition: allowed
+        RunEvidence nonMaterial = withAudit(valid(), audit -> {
+            audit.set(2, transition(3, "ARCHITECTURE_APPROVAL", "PENDING", "SKIPPED"));
+            audit.remove(3);
+            return audit;
+        });
+        List<Stage> skippedArchitecture = new ArrayList<>(stages("SUCCEEDED"));
+        skippedArchitecture.set(2, new Stage("ARCHITECTURE_APPROVAL", List.of("DESIGN"), "SKIPPED"));
+        RunEvidence nonMaterialRun = new RunEvidence("alice", skippedArchitecture, nonMaterial.audit(),
+                List.of(gate("RELEASE_APPROVAL", "carol", 8)), nonMaterial.evaluations());
+        assertThat(GovernanceInvariants.violations(nonMaterialRun))
+                .noneMatch(v -> v.contains("ARCHITECTURE_APPROVAL"));
+
+        // skipping it after it awaited a decision is a bypass
+        RunEvidence bypass = withAudit(valid(), audit -> {
+            audit.set(3, transition(4, "ARCHITECTURE_APPROVAL", "AWAITING_DECISION", "SKIPPED"));
+            return audit;
+        });
+        assertThat(GovernanceInvariants.violations(bypass))
+                .anyMatch(v -> v.startsWith("gate order: IMPLEMENTATION") && v.contains("ARCHITECTURE_APPROVAL was SKIPPED"));
     }
 
     @Test

@@ -23,8 +23,10 @@ import tools.jackson.databind.JsonNode;
  * evidence as the API returns it: stages, audit trail, decisions, and policy evaluations.
  * <ol>
  * <li><b>Gate order</b>: no attempt of a stage downstream of a gate starts while that gate is not
- * passed. The latest transition of the gate before the attempt must be SUCCEEDED; SKIPPED is allowed
- * only for the conditional CLARIFICATION gate, and REMOVED only for a rejected CHANGE_APPROVAL gate.
+ * passed. The latest transition of the gate before the attempt must be SUCCEEDED. SKIPPED is allowed
+ * only for the conditional gates (CLARIFICATION, ARCHITECTURE_APPROVAL), and only directly from
+ * PENDING (condition false); a gate skipped after it awaited a decision is a bypass. REMOVED is
+ * allowed only for a rejected CHANGE_APPROVAL gate.
  * A gate constrains every attempt from the start of the run, except CHANGE_APPROVAL, which only
  * re-planning inserts: it constrains attempts after it first appears in the trail. The
  * FINAL_SUMMARY of a run being safe-stopped is part of the safe-stop procedure and is exempt.</li>
@@ -44,6 +46,8 @@ public final class GovernanceInvariants {
     private static final Set<String> SEPARATED_GATES = Set.of("ARCHITECTURE_APPROVAL", "CHANGE_APPROVAL", "RELEASE_APPROVAL");
     /** Gates that only re-planning inserts; every other gate is in the plan from the start. */
     private static final Set<String> INSERTED_GATES = Set.of("CHANGE_APPROVAL");
+    /** Conditional gates (PlanFactory): skipped by the engine, PENDING to SKIPPED, when their condition is false. */
+    private static final Set<String> CONDITIONAL_GATES = Set.of("CLARIFICATION", "ARCHITECTURE_APPROVAL");
 
     private GovernanceInvariants() {
     }
@@ -140,7 +144,8 @@ public final class GovernanceInvariants {
                 }
                 AuditEntry last = lastGateTransition.get(gate);
                 String state = last == null ? "NONE" : last.toState();
-                boolean passed = "SUCCEEDED".equals(state) || ("SKIPPED".equals(state) && "CLARIFICATION".equals(gate))
+                boolean passed = "SUCCEEDED".equals(state)
+                        || ("SKIPPED".equals(state) && CONDITIONAL_GATES.contains(gate) && "PENDING".equals(last.fromState()))
                         || ("REMOVED".equals(state) && "CHANGE_APPROVAL".equals(gate));
                 if (!passed) {
                     violations.add("gate order: " + e.target() + " started at seq " + e.seq() + " while gate " + gate + " was " + state);

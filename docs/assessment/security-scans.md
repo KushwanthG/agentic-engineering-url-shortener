@@ -11,8 +11,8 @@ patterns:
 - private-key blocks;
 - cloud access keys (`AKIA…`/`ASIA…`);
 - bearer tokens;
-- `password=`/`password:` values;
-- `secret=`/`secret:`/`api-key` values.
+- values assigned to a password key (with `=` or `:`);
+- values assigned to a secret or API-key key.
 
 **Detection is proven, not assumed.** There is one planted fixture per pattern under
 `src/test/resources/secret-scan-fixtures/`, and the test asserts that each one fires. Those fixture

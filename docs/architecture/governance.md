@@ -94,7 +94,9 @@ invariants:
 
 1. **Gate order.** No attempt of a stage downstream of a gate starts while that gate has not passed.
    The gate's latest transition before the attempt must be `SUCCEEDED`. There are two exceptions:
-   - The conditional `CLARIFICATION` gate may be `SKIPPED`.
+   - A conditional gate (`CLARIFICATION`, or `ARCHITECTURE_APPROVAL` for a non-material change) may be
+     `SKIPPED`, but only directly from `PENDING`, when its condition is false. A gate skipped after it
+     awaited a decision is a bypass.
    - A rejected `CHANGE_APPROVAL` gate may be `REMOVED`.
 
    `CHANGE_APPROVAL` is inserted only by re-planning, so it constrains attempts only after it first

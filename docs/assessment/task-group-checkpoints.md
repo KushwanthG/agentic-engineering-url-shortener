@@ -322,3 +322,16 @@ security rules unchanged (deny-by-default; redirect route public by design); all
 | 11 | Deviations from plan | (a) **T111** validates the scenario artifacts inside the existing SCN-A/B/C e2e tests instead of re-running the scenarios in `ArtifactSchemaTest`, which proves the mapping is complete and that every schema rejects an empty document. (b) **T127** has a keyed allow-list of 7 reviewed non-secret matches besides the demo tokens. (c) **T128** was not run (see `security-scans.md`) |
 | 12 | New risks | PVT-19 and PVT-20 are not met on this machine; the causes are hypotheses, not profiled |
 | 18 | Human approval required | performance miss (NFR-PRF-01), dependency-scan gap (NFR-SEC-05), and deviations (a)–(c) at G6 |
+
+---
+
+## Checkpoint: Phase 10b — documentation (T116, T117, T118)
+
+| # | Item | Record |
+|---|------|--------|
+| 1 | Completed tasks | T116 (`README.md`, `SECURITY.md`, `CONTRIBUTING.md`), T117 (`docs/architecture/overview.md`, `docs/assessment/testing-limitations-tradeoffs.md`), T118 (`docs/assessment/risk-register.md`) |
+| 4 | Files created or changed | as above; also `docs/architecture/governance.md` §8 (conditional gates), `docs/assessment/security-scans.md` (wording), `support/GovernanceInvariants` and `GovernanceInvariantsTest` (fix below) |
+| 7 | Validation commands executed | `mvnw clean verify` → 528 tests, 1 failure: the secret scan flagged `security-scans.md`, which spelled out the pattern names literally. The doc was reworded (the scanner was not loosened), then `RepositorySecretScanTest,TraceabilityMatrixTest` was green with every new doc staged. Every test class cited in SECURITY.md and the risk register was checked to exist |
+| 11 | Deviations and findings | (a) **Checker fix.** A strictness bug in the governance-invariant checker, found while writing the overview: `ARCHITECTURE_APPROVAL` is a conditional gate (skipped for non-material changes), and the checker would have flagged such a skip. Conditional gates may now be SKIPPED, but only directly from PENDING. A gate skipped after it awaited a decision is still reported, which a new negative fixture proves. The e2e runs are still green. (b) **Risk statuses.** The register marks two ADR mitigations as not in place: ADR-011's autonomy budget (R-17) and ADR-009's JDBC query timeout for agents (R-14) |
+| 16 | Commit message | `docs: add README, security, contributing, architecture overview, limitations, and risk register` |
+| 17 | Next task group | Phase 10c: T120 (clean-clone quickstart validation), T121 (convergence), T122 (readiness proposal), T123 (final summary), T124 (reviewer guide) |

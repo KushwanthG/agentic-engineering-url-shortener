@@ -291,3 +291,14 @@ detection pattern first against a planted fixture. Runs of 2026-09-27.
 | T113 | `PerformanceMeasurementTest` (1) | Passes the regression bound (10× the targets). **Targets not met reliably**: see `performance.md` (redirect p95 119 ms and 220 ms against 50 ms) |
 | T127 | `RepositorySecretScanTest` (3) | First run: 7 findings. Each was triaged by reading the line: all 7 are non-secrets, now in a keyed allow-list with reasons; a stale entry fails the test. A second finding came from the allow-list's own reason text, which was reworded. Then 3/3 |
 | T128 | OSV-Scanner | **Not run**: the scanner is not installed; recorded as a release limitation in `security-scans.md` |
+
+## Phase 11 — convergence tasks (T133, T135, T136)
+
+`/speckit-converge` (T121) found a **constitution V violation**. At every startup, Spring Boot
+created an unused default user and logged its generated password; this was observed in the T120
+demo log. The run appended T133–T136.
+
+| Task | Test(s) | Red run | Green run |
+|------|---------|---------|-----------|
+| T133, T135 | `StartupLogSecurityTest` (2): starts the real application in the default and demo profiles and captures the output | 2 tests, 2 failures: `not to contain (ignoring case): "generated security password"` (both profiles). The demo-warning assertion was not reached | Green after two changes: an empty `UserDetailsService` bean (bearer tokens are the only authentication), and `DemoProfileWarning` (demo profile only). Run together with `SecurityMatrixTest`, `GovernanceSecurityMatrixTest`, `ArchitectureTest` |
+| T136 | N/A (documentation) | — | `quickstart.md` corrected for D-1 to D-3 of `quickstart-validation.md` |

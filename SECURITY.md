@@ -27,7 +27,7 @@ actuator endpoints require the auditor role.
 | Approval bypass or self-approval | role checks, separation of duties, transition guards, ArchUnit rules | `SeparationOfDutiesTest`, `GovernanceSecurityMatrixTest`, `GovernanceInvariants` on every e2e run |
 | An agent exceeding its mandate | declared permissions and a permission-filtered port; agents cannot reach governance or security code | `AgentPermissionTest`, `ArchitectureTest` |
 | Audit tampering | SHA-256 hash chain; verification endpoint | `AuditTamperDetectionTest`, `EvidenceControllerTest` |
-| Secrets in logs, artifacts, or the repository | hashed tokens; the `Authorization` header is never logged; policy SEC-002 scans artifacts; repository secret scan | `TokenNotLoggedTest`, `PolicyRulesTest`, `RepositorySecretScanTest` |
+| Secrets in logs, artifacts, or the repository | hashed tokens; the `Authorization` header is never logged; no default password user (so no generated password is logged); policy SEC-002 scans artifacts; repository secret scan | `TokenNotLoggedTest`, `StartupLogSecurityTest`, `PolicyRulesTest`, `RepositorySecretScanTest` |
 | SQL injection | parameterized JPA and JDBC queries only | code review; hostile-input tests |
 | Fault injection or preview abused in production | disabled by default; preview runs in-process only (no HTTP path) | `SecurityMatrixTest`, `PreviewIsolationTest` |
 

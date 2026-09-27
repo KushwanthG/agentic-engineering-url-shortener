@@ -30,7 +30,7 @@
 | R-11 | ADR-003 | Dialect drift against PostgreSQL | M | M | PostgreSQL mode, standard SQL in migrations (BL-02) | Partial |
 | R-12 | ADR-004 | Offensive generated words | L | L | Accepted for a prototype; a production blocklist is possible | Accepted |
 | R-13 | ADR-005 | Races between attempt completion and decisions | M | H | Per-run lock, staleness checks, `CONCURRENT_DECISION` (`ConcurrentGateDecisionTest`, `RunCoordinatorTest`) | Mitigated |
-| R-14 | ADR-009 | An agent ignores interruption after a timeout and starves the pool (RC-6) | L | M | Timeouts and late-result discard (`StageRetryTimeoutTest`); `sdlc.executor.active` gauge. The JDBC query timeout for agents is **not verified** | Partial |
+| R-14 | ADR-009 | An agent ignores interruption after a timeout and starves the pool (RC-6) | L | M | Timeouts and late-result discard (`StageRetryTimeoutTest`); `sdlc.executor.active` gauge; a global JPA query timeout of 15 s (`jakarta.persistence.query.timeout` in `application.yml`) is configured but **not tested** | Partial |
 | R-15 | ADR-010 | Rolling back a flag another run changed | L | H | Rollback only while the flag holds this run's value; otherwise a conflict is recorded (`CompensationCoordinatorTest`, `ReleaseRollbackTest`) | Mitigated |
 | R-16 | ADR-011 | Hidden inputs defeat content-addressed reuse | L | H | Agents see only declared inputs (`StageContext`); `InputFingerprinterTest` | Mitigated |
 | R-17 | ADR-011 | Re-plan storms | L | M | Clarification rounds bounded (`ClarificationFlowTest`). The autonomy budget named in the ADR is **not implemented** (R-01) | Partial |
@@ -38,7 +38,7 @@
 | R-19 | ADR-012 | A database administrator rewrites the whole audit chain | L | H | Documented residual risk; external anchoring is backlog BL-06 | Accepted |
 | R-20 | ADR-013 | Flaky asynchronous tests | M | M | Awaitility, scripted agents, a separate context per suite; the suite is repeatedly green | Mitigated |
 | R-21 | ADR-014 | A reviewer runs without the demo profile and gets 401 | M | L | README and quickstart explain the profiles | Mitigated |
-| R-22 | ADR-015 | Demo tokens reused in a real deployment | L | H | Demo principals only in the demo and test profiles; hashes only; [SECURITY.md](../../SECURITY.md) notice | Mitigated |
+| R-22 | ADR-015 | Demo tokens reused in a real deployment | L | H | Demo principals only in the demo and test profiles; hashes only; a `DEMO PROFILE ACTIVE` startup warning (`StartupLogSecurityTest`, T135); [SECURITY.md](../../SECURITY.md) notice | Mitigated |
 | R-23 | ADR-015 | Token brute force; failed authentication attempts are not throttled (analysis finding **L7**) | L | M | Long random tokens are recommended for production; creation is rate-limited. **No throttling of failed authentication** | Open (residual) |
 | R-24 | ADR-017 | Reviewers expect LLM agents | M | M | ADR-017 rationale; README states that the agents are deterministic | Mitigated |
 | R-25 | ADR-017 | The capability catalog drifts from the code | L | M | Delivery checks at IMPLEMENTATION and acceptance probes against the live system | Mitigated |

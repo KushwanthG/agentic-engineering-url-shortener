@@ -12,6 +12,8 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 
@@ -56,5 +58,17 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/{code:[A-Za-z0-9_-]+}").permitAll()
                         .anyRequest().denyAll());
         return http.build();
+    }
+
+    /**
+     * Authentication is by bearer token only ({@link BearerTokenAuthenticationFilter}); there are no
+     * username/password users. Declaring this empty service stops Spring Boot from creating a default
+     * user whose generated password it would log at startup (constitution V: no credentials in logs).
+     */
+    @Bean
+    UserDetailsService noPasswordUsers() {
+        return username -> {
+            throw new UsernameNotFoundException("password authentication is not supported");
+        };
     }
 }

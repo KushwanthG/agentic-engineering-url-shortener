@@ -595,3 +595,16 @@ unit; each ends with a checkpoint review and a commit.
 - Red runs are recorded in `docs/assessment/tdd-evidence.md`; implementation-first work is never
   described as TDD.
 - `[GATE]` tasks are checked only by the candidate.
+
+---
+
+## Phase 11: Convergence
+
+- [X] T133 CRITICAL: Stop Spring Boot's default in-memory user from being created, so its generated password is never logged at startup; add a startup-log test per Constitution V (contradicts)
+  - Req: Constitution V, NFR-SEC-03 · Evidence: `Using generated security password` in the demo start log (T120) · TDD: Red→Green (log capture) · Done: no credential in startup logs in any profile
+- [ ] T134 Profile redirect and creation latency and meet PVT-19/PVT-20, or record an accepted limitation for G6, per NFR-PRF-01 (partial)
+  - Req: NFR-PRF-01 · Evidence: docs/assessment/performance.md (redirect p95 119 and 220 ms against 50 ms) · Done: targets met in a repeated measurement, or limitation accepted by the candidate
+- [X] T135 Log a clear non-production warning at startup when the demo profile (demo credentials) is active, per plan: ADR-015 mitigation (missing)
+  - Req: NFR-SEC-01, Constitution V · Done: warning present in the demo startup log and absent in the default profile (test)
+- [X] T136 Correct quickstart.md discrepancies D-1 to D-3 (health response, parallel branches, evidence locations) per SC-001 (partial)
+  - Req: SC-001 · Evidence: docs/assessment/quickstart-validation.md · Done: quickstart matches the validated behavior

@@ -2,6 +2,7 @@ package com.agentic.urlshortener.orchestration.engine;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
@@ -20,6 +21,11 @@ import com.agentic.urlshortener.orchestration.config.OrchestrationProperties;
 import com.agentic.urlshortener.orchestration.domain.FailureClass;
 import com.agentic.urlshortener.orchestration.reliability.FailureClassifier;
 
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
+
 import jakarta.annotation.PreDestroy;
 
 /**
@@ -37,11 +43,16 @@ public class StageDispatcher {
     private final ExecutorService executor;
     private final ScheduledExecutorService timeouts;
     private final FailureClassifier classifier;
+    private final ObservationRegistry observations;
     private volatile boolean closing;
 
-    public StageDispatcher(OrchestrationProperties properties, FailureClassifier classifier) {
+    public StageDispatcher(OrchestrationProperties properties, FailureClassifier classifier, MeterRegistry meters,
+            ObservationRegistry observations) {
         this.classifier = classifier;
+        this.observations = observations;
         this.executor = Executors.newFixedThreadPool(properties.stageExecutorThreads(), daemonThreads("stage-exec-"));
+        Gauge.builder("sdlc.executor.active", executor, e -> ((ThreadPoolExecutor) e).getActiveCount())
+                .description("Stage attempts currently executing on the bounded agent pool").register(meters);
         this.timeouts = Executors.newSingleThreadScheduledExecutor(daemonThreads("stage-timeout-"));
     }
 
@@ -56,7 +67,7 @@ public class StageDispatcher {
             MDC.put("stage", dispatch.context().stageType().name());
             MDC.put("attempt", String.valueOf(dispatch.attemptNo()));
             try {
-                StageResult result = execute(dispatch);
+                StageResult result = observed(dispatch);
                 if (closing) {
                     log.info("Dropping the result of {} attempt {}: the application is stopping; recovery resumes it",
                             dispatch.context().stageType(), dispatch.attemptNo());
@@ -83,6 +94,15 @@ public class StageDispatcher {
                 }
             }
         }, dispatch.timeout().toMillis(), TimeUnit.MILLISECONDS);
+    }
+
+    /** Each attempt is an {@code sdlc.stage} observation; the run id is a high-cardinality key, never a meter tag. */
+    private StageResult observed(Dispatch dispatch) {
+        return Observation.createNotStarted("sdlc.stage", observations)
+                .lowCardinalityKeyValue("stage", dispatch.context().stageType().name())
+                .highCardinalityKeyValue("runId", dispatch.context().runId().toString())
+                .highCardinalityKeyValue("attempt", String.valueOf(dispatch.attemptNo()))
+                .observe(() -> execute(dispatch));
     }
 
     StageResult execute(Dispatch dispatch) {

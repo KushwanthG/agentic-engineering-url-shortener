@@ -37,6 +37,7 @@ import com.agentic.urlshortener.orchestration.engine.RunAudit;
 import com.agentic.urlshortener.orchestration.engine.RunCoordinator;
 import com.agentic.urlshortener.orchestration.engine.RunLocks;
 import com.agentic.urlshortener.orchestration.reliability.CompensationCoordinator;
+import com.agentic.urlshortener.orchestration.metrics.OrchestrationMeters;
 import com.agentic.urlshortener.orchestration.repository.DecisionRepository;
 import com.agentic.urlshortener.orchestration.repository.PolicyExceptionRepository;
 import com.agentic.urlshortener.orchestration.repository.StageNodeRepository;
@@ -68,11 +69,13 @@ public class GateService {
     private final RunAudit audit;
     private final TransactionTemplate tx;
     private final Clock clock;
+    private final OrchestrationMeters meters;
 
     public GateService(WorkflowRunRepository runs, StageNodeRepository nodes, DecisionRepository decisions, ArtifactStore artifacts,
             RunCoordinator coordinator, CompensationCoordinator compensation, RunLocks locks, RunAudit audit,
             PolicyExceptionRepository exceptions,
-            PlatformTransactionManager transactionManager, Clock clock) {
+            PlatformTransactionManager transactionManager, Clock clock, OrchestrationMeters meters) {
+        this.meters = meters;
         this.exceptions = exceptions;
         this.runs = runs;
         this.nodes = nodes;
@@ -210,6 +213,7 @@ public class GateService {
             current.requireManualIntervention();
         }
         current.terminate(RunStatus.REJECTED, reason, now);
+        meters.runTerminated(RunStatus.REJECTED.name());
         audit.runTransition(runId, RunStatus.COMPENSATING, RunStatus.REJECTED, reason);
         audit.system(runId, "RUN_TERMINATED", "RUN", "REJECTED", reason, null);
     }

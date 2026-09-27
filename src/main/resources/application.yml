@@ -46,7 +46,7 @@ management:
 
 logging:
   pattern:
-    level: "%5p [corr=%X{correlationId:-} run=%X{runId:-} stage=%X{stage:-}]"
+    level: "%5p [corr=%X{correlationId:-} run=%X{runId:-} stage=%X{stage:-} attempt=%X{attempt:-}]"
 
 app:
   shortener:

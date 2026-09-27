@@ -1,16 +1,11 @@
 package com.agentic.urlshortener.orchestration.service;
 
 import java.time.Duration;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -21,11 +16,11 @@ import com.agentic.urlshortener.common.exception.ErrorCode;
 import com.agentic.urlshortener.common.util.CanonicalJson;
 import com.agentic.urlshortener.orchestration.domain.Artifact;
 import com.agentic.urlshortener.orchestration.domain.AwaitingType;
-import com.agentic.urlshortener.orchestration.domain.Decision;
 import com.agentic.urlshortener.orchestration.domain.StageNode;
 import com.agentic.urlshortener.orchestration.domain.StageStatus;
 import com.agentic.urlshortener.orchestration.domain.WorkflowRun;
 import com.agentic.urlshortener.orchestration.dto.DecisionView;
+import com.agentic.urlshortener.orchestration.engine.LineageService;
 import com.agentic.urlshortener.orchestration.dto.WorkflowViews;
 import com.agentic.urlshortener.orchestration.governance.ReviewBundles;
 import com.agentic.urlshortener.orchestration.policy.PolicySet;
@@ -55,10 +50,12 @@ public class WorkflowQueryService {
     private final DecisionRepository decisions;
     private final PolicyEvaluationRepository evaluations;
     private final PolicySetLoader policySets;
+    private final LineageService lineage;
 
     public WorkflowQueryService(WorkflowRunRepository runs, StageNodeRepository nodes, StageAttemptRepository attempts,
             PlanVersionRepository plans, RequirementVersionRepository requirements, ArtifactRepository artifacts,
-            DecisionRepository decisions, PolicyEvaluationRepository evaluations, PolicySetLoader policySets) {
+            DecisionRepository decisions, PolicyEvaluationRepository evaluations, PolicySetLoader policySets,
+            LineageService lineage) {
         this.runs = runs;
         this.nodes = nodes;
         this.attempts = attempts;
@@ -68,6 +65,7 @@ public class WorkflowQueryService {
         this.decisions = decisions;
         this.evaluations = evaluations;
         this.policySets = policySets;
+        this.lineage = lineage;
     }
 
     public List<WorkflowViews.RunSummary> list() {
@@ -128,7 +126,7 @@ public class WorkflowQueryService {
         return new WorkflowViews.ArtifactDetail(artifact.getId().toString(), artifact.getArtifactType(), artifact.getVersion(),
                 artifact.getStageKey().name(), artifact.getGeneration(), artifact.getMediaType(), artifact.getFingerprint(),
                 artifact.getProducedBy(), artifact.isSuperseded(), artifact.getCreatedAt(), artifact.getContent(), inputs(artifact),
-                lineage(runId, artifact));
+                lineage.of(runId, artifact).stream().map(DecisionView::of).toList());
     }
 
     public List<DecisionView> decisions(UUID runId) {
@@ -155,46 +153,6 @@ public class WorkflowQueryService {
                     e.getStageKey().name(), e.getGeneration(), e.getExceptionId() == null ? null : e.getExceptionId().toString(),
                     e.isSimulated(), e.getEvaluatedAt());
         }).toList();
-    }
-
-    /** Decisions that influenced an artifact through its inputs, transitively, plus those that produced requirement versions. */
-    private List<DecisionView> lineage(UUID runId, Artifact artifact) {
-        Map<UUID, Artifact> byId = new HashMap<>();
-        artifacts.findByRunIdOrderByCreatedAtAsc(runId).forEach(a -> byId.put(a.getId(), a));
-        Set<String> fingerprints = new HashSet<>();
-        Set<UUID> seen = new HashSet<>();
-        Deque<UUID> todo = new ArrayDeque<>(inputIds(artifact));
-        while (!todo.isEmpty()) {
-            UUID id = todo.poll();
-            Artifact input = byId.get(id);
-            if (input != null && seen.add(id)) {
-                fingerprints.add(input.getFingerprint());
-                todo.addAll(inputIds(input));
-            }
-        }
-        Set<UUID> requirementDecisions = new HashSet<>();
-        requirements.findByRunIdOrderByVersionAsc(runId).stream().filter(r -> r.getDecisionId() != null)
-                .forEach(r -> requirementDecisions.add(r.getDecisionId()));
-        List<DecisionView> lineage = new ArrayList<>();
-        for (Decision decision : decisions.findByRunIdOrderByCreatedAtAsc(runId)) {
-            if (!decision.isValid()) {
-                continue;
-            }
-            boolean bound = decision.getBoundFingerprints() != null
-                    && CanonicalJson.read(decision.getBoundFingerprints(), Map.class).values().stream().anyMatch(fingerprints::contains);
-            if (bound || requirementDecisions.contains(decision.getId())) {
-                lineage.add(DecisionView.of(decision));
-            }
-        }
-        return lineage;
-    }
-
-    private static List<UUID> inputIds(Artifact artifact) {
-        List<UUID> ids = new ArrayList<>();
-        for (JsonNode ref : CanonicalJson.parse(artifact.getInputRefs())) {
-            ids.add(UUID.fromString(ref.path("artifactId").asString()));
-        }
-        return ids;
     }
 
     private static List<WorkflowViews.ArtifactRef> inputs(Artifact artifact) {

@@ -31,6 +31,8 @@ import com.agentic.urlshortener.common.util.CanonicalJson;
 import com.agentic.urlshortener.orchestration.audit.AuditService;
 import com.agentic.urlshortener.orchestration.audit.AuditVerification;
 import com.agentic.urlshortener.orchestration.domain.AuditEvent;
+import com.agentic.urlshortener.support.HttpDriver;
+import com.agentic.urlshortener.support.GovernanceInvariants;
 import com.agentic.urlshortener.support.EvidenceExporter;
 import com.agentic.urlshortener.support.Tokens;
 
@@ -82,6 +84,7 @@ class ScenarioAGreenfieldE2ETest {
         decide(runPath, "RELEASE_APPROVAL", Tokens.RELEASE_OWNER, "Readiness, validation and compliance reviewed" + SIMULATED);
 
         JsonNode run = awaitTerminal(runPath);
+        GovernanceInvariants.assertHold(new HttpDriver(port()), runPath);
         assertThat(run.path("status").asString()).as("terminal reason: %s", run.path("terminalReason")).isEqualTo("COMPLETED");
         assertThat(run.path("readiness").asString()).isEqualTo("READY");
         assertThat(run.path("policySetVersion").asString()).isEqualTo("1.0.0");

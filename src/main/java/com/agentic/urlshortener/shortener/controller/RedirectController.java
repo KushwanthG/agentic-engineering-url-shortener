@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.agentic.urlshortener.common.exception.ApiException;
 import com.agentic.urlshortener.common.exception.ErrorCode;
+import com.agentic.urlshortener.shortener.ShortenerMeters;
 import com.agentic.urlshortener.shortener.config.RateLimiters;
 import com.agentic.urlshortener.shortener.dto.Resolution;
 import com.agentic.urlshortener.shortener.service.RedirectService;
@@ -30,8 +31,10 @@ public class RedirectController {
 
     private final RedirectService redirects;
     private final RateLimiters rateLimiters;
+    private final ShortenerMeters meters;
 
-    public RedirectController(RedirectService redirects, RateLimiters rateLimiters) {
+    public RedirectController(RedirectService redirects, RateLimiters rateLimiters, ShortenerMeters meters) {
+        this.meters = meters;
         this.redirects = redirects;
         this.rateLimiters = rateLimiters;
     }
@@ -42,10 +45,12 @@ public class RedirectController {
         String client = request.getRemoteAddr();
         TokenBucketRateLimiter notFoundLimiter = rateLimiters.notFound();
         if (!notFoundLimiter.hasCapacity(client)) {
+            meters.rateLimited(ShortenerMeters.NOT_FOUND_LIMITER);
             throw ApiException.rateLimited("Too many unknown short codes from this address; retry later.",
                     notFoundLimiter.retryAfterSeconds(client));
         }
         Resolution resolution = redirects.resolve(code, referer);
+        meters.redirect(resolution.outcome().name());
         return switch (resolution.outcome()) {
             case REDIRECT -> ResponseEntity.status(HttpStatus.FOUND)
                     .location(URI.create(resolution.targetUrl()))

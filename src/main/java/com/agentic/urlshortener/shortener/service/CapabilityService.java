@@ -2,7 +2,9 @@ package com.agentic.urlshortener.shortener.service;
 
 import java.time.Clock;
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -111,6 +113,14 @@ public class CapabilityService {
         Map<String, Object> before = previousParameters == null ? Map.of() : CanonicalJson.read(previousParameters, Map.class);
         return new CapabilityChange(capability.id(), previouslyReleased, before, released,
                 parameters == null ? Map.of() : Map.copyOf(parameters), changed);
+    }
+
+    /** The release rows of every capability, in declaration order (read-only; for evidence). */
+    @Transactional(readOnly = true)
+    public List<CapabilityRelease> releases() {
+        return Arrays.stream(Capability.values())
+                .map(c -> releases.findById(c.id()).orElseGet(() -> CapabilityRelease.unreleased(c.id())))
+                .toList();
     }
 
     /** Whether the capability has a release row (it is registered at startup). */

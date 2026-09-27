@@ -293,4 +293,5 @@ and decides whether redirects may be cached.
 | Phase 6 deviations (a)–(g) (`task-group-checkpoints.md`, Phase 6 row 11), including the limitation that a capability released before a run cannot be rolled back automatically | Phase 6 checkpoint | pending review |
 | CP2 scope record (`timebox-and-scope.md`): SD-1 deferrals T074 and T096 continue | CP2 | pending confirmation at G6 |
 | Phase 7 deviations (a)–(f) (`task-group-checkpoints.md`, Phase 7 row 11), in particular the probe-only click-store outage simulation | Phase 7 checkpoint | pending review |
-| Phase 8 deviations (a)–(h) (`task-group-checkpoints.md`, Phase 8 row 11): approval carry-over on re-planning, materiality rules, and the change-gate limitation | Phase 8 checkpoint | pending review |
+| Phase 8 deviations (a)–(i) (`task-group-checkpoints.md`, Phase 8 row 11): approval carry-over on re-planning, materiality rules, and the change-gate limitation | Phase 8 checkpoint | pending review |
+| Phase 9 deviations (a)–(j) (`task-group-checkpoints.md`, Phase 9 row 11) and the two unimplemented FR MUSTs (FR-ORC-18, FR-RPL-06; SD-1) for G6 | Phase 9 checkpoint | pending review |

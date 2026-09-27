@@ -85,3 +85,53 @@ SCN-A exports the gate decisions, with their bound fingerprints, as `E-A5-decisi
 [SCN-A](../scenarios/scn-a-greenfield.md)). The decisions in that export are **simulated human
 input** given by the automated test as labeled demo principals. They are not decisions of the
 candidate.
+
+## 8. Governance invariants checked on every end-to-end run (SC-004)
+
+`GovernanceInvariants` (test support, T132) is an independent checker. It reads a run's evidence
+only through the API: stages, audit trail, decisions, and policy evaluations. It asserts three
+invariants:
+
+1. **Gate order.** No attempt of a stage downstream of a gate starts while that gate has not passed.
+   The gate's latest transition before the attempt must be `SUCCEEDED`. There are two exceptions:
+   - The conditional `CLARIFICATION` gate may be `SKIPPED`.
+   - A rejected `CHANGE_APPROVAL` gate may be `REMOVED`.
+
+   `CHANGE_APPROVAL` is inserted only by re-planning, so it constrains attempts only after it first
+   appears in the trail. Every other gate constrains the run from its start. The `FINAL_SUMMARY` of
+   a run that is being safe-stopped is part of the safe-stop procedure and is exempt.
+2. **Human decision.** Every transition of a gate to `SUCCEEDED` is preceded by an approving
+   `HUMAN` decision for that gate. For the architecture, change, and release gates, the decider must
+   not be the run's requester. A gate that ends `SUCCEEDED` still has a valid approving decision.
+3. **No release after a mandatory failure.** When `RELEASE` starts, the latest evaluation of every
+   mandatory policy is `PASS`, `NOT_APPLICABLE`, or `EXCEPTION_REQUESTED`. An `EXCEPTION_REQUESTED`
+   result counts only if a human approved the exception before the release and it has not expired.
+
+The checker was first proven against deliberately violating sequences (`GovernanceInvariantsTest`,
+8 cases). One of those negative fixtures exposed a leniency in the first version: gates were
+enforced only after their first audit event. That was fixed before the checker was trusted. It now
+runs at the end of every scenario and drill end-to-end test: SCN-A, SCN-B, SCN-C, and the 7 drill
+runs.
+
+## 9. Evidence API (FR-AUD-02, FR-AUD-03)
+
+The following endpoints are readable by the requester, approver, release-owner, and auditor roles.
+API consumers are refused.
+
+| Endpoint | Content |
+|---|---|
+| `GET /api/v1/workflows/{id}/audit` | The run's hash-chained audit trail, in sequence order. |
+| `GET /api/v1/workflows/{id}/audit/verification` | Recomputes the chain. The result is valid, or it gives the first broken sequence; direct SQL tampering is detected (`EvidenceControllerTest`). |
+| `GET /api/v1/workflows/{id}/summary` | The final engineering summary as Markdown, once the run has ended. |
+| `GET /api/v1/workflows/{id}/artifacts/{artifactId}` | The artifact with its `lineage`. |
+| `GET /api/v1/policies` | The active policy set. |
+| `GET /api/v1/capabilities` | Capability release states, with who changed them and when. |
+| `GET /api/v1/reliability/report` | Reliability metrics (see [reliability](reliability.md) §10). |
+
+An artifact's `lineage` lists the valid decisions that influenced it (`LineageService`):
+- gate decisions bound to an artifact in its transitive input closure;
+- the decision that produced a requirement version the artifact is, or derives from (matched by
+  fingerprint).
+
+A decision bound only to the artifact itself approved it; it did not shape it, so it is not
+included.

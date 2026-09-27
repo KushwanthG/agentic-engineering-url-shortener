@@ -29,6 +29,7 @@ import com.agentic.urlshortener.orchestration.audit.AuditService;
 import com.agentic.urlshortener.orchestration.domain.ActorType;
 import com.agentic.urlshortener.orchestration.domain.AuditRecord;
 import com.agentic.urlshortener.orchestration.port.ApplicationPlanePort;
+import com.agentic.urlshortener.orchestration.port.CapabilityReleaseReader;
 import com.agentic.urlshortener.orchestration.port.CapabilityState;
 import com.agentic.urlshortener.orchestration.port.DeliveryStatus;
 import com.agentic.urlshortener.orchestration.port.LinkSnapshot;
@@ -51,7 +52,7 @@ import com.agentic.urlshortener.shortener.service.RedirectService;
  * changes are audited on the {@code GLOBAL} chain in the same transaction as the flag change.
  */
 @Component
-public class InProcessApplicationPlaneAdapter implements ApplicationPlanePort {
+public class InProcessApplicationPlaneAdapter implements ApplicationPlanePort, CapabilityReleaseReader {
 
     private static final String CONTRACT = "contracts/openapi.yaml";
 
@@ -107,6 +108,14 @@ public class InProcessApplicationPlaneAdapter implements ApplicationPlanePort {
         } catch (DataAccessException e) {
             return ProbeResponse.unavailable(e.getClass().getSimpleName());
         }
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public List<CapabilityRecord> capabilities() {
+        return capabilities.releases().stream().map(r -> new CapabilityRecord(r.getCapabilityId(), r.isReleased(),
+                r.getParameters() == null ? Map.of() : (Map<String, Object>) CanonicalJson.read(r.getParameters(), Map.class),
+                r.getChangedBy(), r.getChangedByRun(), r.getChangedAt(), r.getReason())).toList();
     }
 
     @Override

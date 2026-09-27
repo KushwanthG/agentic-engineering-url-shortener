@@ -33,6 +33,7 @@ import com.agentic.urlshortener.orchestration.dto.RequirementSubmission;
 import com.agentic.urlshortener.orchestration.engine.PlanValidator;
 import com.agentic.urlshortener.orchestration.engine.RunAudit;
 import com.agentic.urlshortener.orchestration.engine.RunCoordinator;
+import com.agentic.urlshortener.orchestration.metrics.OrchestrationMeters;
 import com.agentic.urlshortener.orchestration.planning.PlanFactory;
 import com.agentic.urlshortener.orchestration.planning.PlanGraph;
 import com.agentic.urlshortener.orchestration.planning.StageSpec;
@@ -66,11 +67,12 @@ public class WorkflowService {
     private final OrchestrationProperties properties;
     private final TransactionTemplate tx;
     private final Clock clock;
+    private final OrchestrationMeters meters;
 
     public WorkflowService(WorkflowRunRepository runs, RequirementVersionRepository requirements, PlanVersionRepository plans,
             StageNodeRepository nodes, PlanFactory planFactory, PlanValidator planValidator, PolicySetLoader policySets,
             RunCoordinator coordinator, RunAudit audit, OrchestrationProperties properties,
-            PlatformTransactionManager transactionManager, Clock clock) {
+            PlatformTransactionManager transactionManager, Clock clock, OrchestrationMeters meters) {
         this.runs = runs;
         this.requirements = requirements;
         this.plans = plans;
@@ -83,6 +85,7 @@ public class WorkflowService {
         this.properties = properties;
         this.tx = new TransactionTemplate(transactionManager);
         this.clock = clock;
+        this.meters = meters;
     }
 
     public UUID submit(RequirementSubmission submission, ApiPrincipal requester) {
@@ -96,6 +99,7 @@ public class WorkflowService {
         }
         UUID runId = UUID.randomUUID();
         tx.executeWithoutResult(status -> create(runId, submission, requester));
+        meters.runStarted();
         coordinator.advance(runId);
         return runId;
     }

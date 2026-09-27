@@ -12,12 +12,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import com.agentic.urlshortener.shortener.ShortenerMeters;
 import com.agentic.urlshortener.shortener.domain.ShortLink;
 import com.agentic.urlshortener.shortener.dto.Resolution;
 import com.agentic.urlshortener.shortener.repository.ShortLinkRepository;
 
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.MeterRegistry;
 
 /**
  * Resolves short codes (FR-RED-01, 03, 04). The click is counted before the redirect is returned
@@ -35,15 +34,13 @@ public class RedirectService {
     private final ShortLinkRepository links;
     private final ClickRecorder clickRecorder;
     private final Clock clock;
-    private final Counter analyticsFailures;
+    private final ShortenerMeters meters;
 
-    public RedirectService(ShortLinkRepository links, ClickRecorder clickRecorder, Clock clock, MeterRegistry meters) {
+    public RedirectService(ShortLinkRepository links, ClickRecorder clickRecorder, Clock clock, ShortenerMeters meters) {
         this.links = links;
         this.clickRecorder = clickRecorder;
         this.clock = clock;
-        this.analyticsFailures = Counter.builder("shortener.analytics.failures")
-                .description("Redirects whose click could not be recorded (redirect still served)")
-                .register(meters);
+        this.meters = meters;
     }
 
     public Resolution resolve(String code, String referrer) {
@@ -65,7 +62,7 @@ public class RedirectService {
         try {
             clickRecorder.record(link.getId(), now, referrerHost(referrer));
         } catch (RuntimeException e) {
-            analyticsFailures.increment();
+            meters.analyticsFailure();
             log.warn("Click for code {} not recorded ({}); redirect served (fail-open)", code, e.getClass().getSimpleName());
         }
         return Resolution.redirect(link.getTargetUrl());
@@ -82,7 +79,7 @@ public class RedirectService {
         try {
             counted = clickRecorder.recordWithinLimit(link.getId(), link.isSynthetic(), now, referrerHost(referrer));
         } catch (RuntimeException e) {
-            analyticsFailures.increment();
+            meters.analyticsFailure();
             log.warn("Click for limited code {} not recorded ({}); redirect refused (fail-closed)", code, e.getClass().getSimpleName());
             return Resolution.unavailable();
         }

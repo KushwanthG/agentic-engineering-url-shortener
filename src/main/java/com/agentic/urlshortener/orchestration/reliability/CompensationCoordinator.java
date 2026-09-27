@@ -14,6 +14,7 @@ import com.agentic.urlshortener.common.util.CanonicalJson;
 import com.agentic.urlshortener.orchestration.domain.Artifact;
 import com.agentic.urlshortener.orchestration.engine.ArtifactStore;
 import com.agentic.urlshortener.orchestration.engine.RunAudit;
+import com.agentic.urlshortener.orchestration.metrics.OrchestrationMeters;
 import com.agentic.urlshortener.orchestration.port.ApplicationPlanePort;
 import com.agentic.urlshortener.orchestration.port.CapabilityState;
 
@@ -36,10 +37,12 @@ public class CompensationCoordinator {
     private final ArtifactStore artifacts;
     private final RunAudit audit;
     private final FaultInjector faults;
+    private final OrchestrationMeters meters;
 
     public CompensationCoordinator(ObjectProvider<ApplicationPlanePort> port, ArtifactStore artifacts, RunAudit audit,
-            FaultInjector faults) {
+            FaultInjector faults, OrchestrationMeters meters) {
         this.faults = faults;
+        this.meters = meters;
         this.port = port;
         this.artifacts = artifacts;
         this.audit = audit;
@@ -116,6 +119,7 @@ public class CompensationCoordinator {
         details.put("detail", action.detail());
         details.put("tries", action.tries());
         audit.system(runId, "COMPENSATION_ACTION", action.target(), action.result(), reason, details);
+        meters.compensation(action.result());
         return action;
     }
 }

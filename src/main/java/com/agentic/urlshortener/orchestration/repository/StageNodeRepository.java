@@ -17,5 +17,7 @@ public interface StageNodeRepository extends JpaRepository<StageNode, UUID> {
 
     List<StageNode> findByRunIdOrderByStageKeyAsc(UUID runId);
 
+    long countByStatus(StageStatus status);
+
     List<StageNode> findByStatusAndDecisionDeadlineBefore(StageStatus status, Instant deadline);
 }

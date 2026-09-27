@@ -53,6 +53,7 @@ import com.agentic.urlshortener.orchestration.reliability.FailureEventRecorder;
 import com.agentic.urlshortener.orchestration.reliability.FaultInjector;
 import com.agentic.urlshortener.orchestration.reliability.RetryPolicy;
 import com.agentic.urlshortener.orchestration.reliability.StagePolicyProperties;
+import com.agentic.urlshortener.orchestration.metrics.OrchestrationMeters;
 import com.agentic.urlshortener.orchestration.planning.InputFingerprinter;
 import com.agentic.urlshortener.orchestration.planning.ReplanningService;
 import com.agentic.urlshortener.orchestration.policy.PolicyEvaluationRecorder;
@@ -94,6 +95,7 @@ public class RunCoordinator {
     private final DecisionRepository decisions;
     private final StagePolicyProperties stagePolicies;
     private final FailureEventRecorder failureEvents;
+    private final OrchestrationMeters meters;
     private final TaskScheduler scheduler;
     private final CompensationCoordinator compensations;
     private final FaultInjector faults;
@@ -108,13 +110,14 @@ public class RunCoordinator {
             ObjectProvider<ApplicationPlanePort> port, PermissionAudit permissionAudit, PolicyEvaluationRecorder policyRecorder,
             DecisionRepository decisions, StagePolicyProperties stagePolicies, FailureEventRecorder failureEvents,
             TaskScheduler scheduler, CompensationCoordinator compensations, FaultInjector faults, ReplanningService replanning,
-            InputFingerprinter fingerprinter) {
+            InputFingerprinter fingerprinter, OrchestrationMeters meters) {
         this.fingerprinter = fingerprinter;
         this.replanning = replanning;
         this.faults = faults;
         this.compensations = compensations;
         this.stagePolicies = stagePolicies;
         this.failureEvents = failureEvents;
+        this.meters = meters;
         this.scheduler = scheduler;
         this.decisions = decisions;
         this.policyRecorder = policyRecorder;
@@ -450,6 +453,7 @@ public class RunCoordinator {
         attempts.save(StageAttempt.start(runId, type, node.getGeneration(), attemptNo, agentId, fallback,
                 fault.map(FaultPlan.Fault::type).orElse(null), cycle, now, fingerprint));
         run.countAttempt();
+        meters.attemptStarted(type, attemptNo, fallback);
         if (recovering) {
             failureEvents.recoveryStarted(runId, type, node.getGeneration(),
                     fallback ? FailureEventRecorder.FALLBACK : FailureEventRecorder.RETRY, now);
@@ -485,6 +489,7 @@ public class RunCoordinator {
                 && node.getAttempts() == dispatch.attemptNo() && !run.getStatus().isTerminal();
         if (!current) {
             attempt.finish(AttemptOutcome.DISCARDED, null, "late or stale result discarded", now);
+            meters.attemptFinished(type, AttemptOutcome.DISCARDED.name(), Duration.between(attempt.getStartedAt(), now));
             audit.system(runId, "ATTEMPT_DISCARDED", type.name(), "DISCARDED", "stage is " + node.getStatus()
                     + " (generation " + node.getGeneration() + ", attempt " + node.getAttempts() + ")", null);
             return;
@@ -532,6 +537,10 @@ public class RunCoordinator {
                         "mandatory policy failed: " + blocked.blockingPolicies());
             }
         }
+        AttemptOutcome outcome = attempt.getOutcome();
+        if (outcome == AttemptOutcome.SUCCEEDED || outcome == AttemptOutcome.NEEDS_CLARIFICATION || outcome == AttemptOutcome.POLICY_BLOCKED) {
+            meters.attemptFinished(type, outcome.name(), Duration.between(attempt.getStartedAt(), now));
+        }
     }
 
     /**
@@ -545,6 +554,7 @@ public class RunCoordinator {
         UUID runId = run.getId();
         StageType type = node.getStageKey();
         attempt.finish(outcome, failureClass, reason, now);
+        meters.attemptFinished(type, outcome.name(), Duration.between(attempt.getStartedAt(), now));
         audit.system(runId, "ATTEMPT_FAILED", type.name(), failureClass.name(), reason, Map.of("attemptNo", attempt.getAttemptNo(),
                 "generation", attempt.getGeneration(), "outcome", outcome.name()));
         failureEvents.attemptFailed(runId, type, node.getGeneration(), failureClass,
@@ -616,6 +626,7 @@ public class RunCoordinator {
         if (allDone) {
             resume(run, now);
             run.terminate(RunStatus.COMPLETED, "all stages completed", now);
+            meters.runTerminated(RunStatus.COMPLETED.name());
             failureEvents.runTerminated(run.getId());
             audit.system(run.getId(), "RUN_TERMINATED", "RUN", "COMPLETED", "all stages completed",
                     Map.of("readiness", String.valueOf(run.getReadiness())));
@@ -667,6 +678,7 @@ public class RunCoordinator {
             run.requireManualIntervention();
         }
         run.terminate(RunStatus.SAFE_STOPPED, reason, now);
+        meters.runTerminated(RunStatus.SAFE_STOPPED.name());
         failureEvents.runTerminated(runId);
         audit.runTransition(runId, RunStatus.COMPENSATING, RunStatus.SAFE_STOPPED, reason);
         Map<String, Object> payload = new LinkedHashMap<>();

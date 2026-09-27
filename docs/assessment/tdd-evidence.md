@@ -243,3 +243,38 @@ Times are UTC on 2026-09-27.
    guide was updated as part of T097, and the run completed `READY`.
 
 **Final green**: 03:42 `mvnw -B -ntp verify` (online) → 483 tests, 0 failures, 0 errors, BUILD SUCCESS.
+
+## Phase 9 — US7 verify evidence independently (T101–T106, T108, T132; T107, T109 deferred by SD-1)
+
+Runs of 2026-09-27. Clock times were not recorded for these runs; the observed results are quoted
+from the Maven output.
+
+| Tasks | Test(s) | Red run (command → observed failure) | Green run (command → result) |
+|-------|---------|--------------------------------------|------------------------------|
+| T101 | `EvidenceControllerTest` (5) | `-Dtest=EvidenceControllerTest` → 5 tests, 5 failures: `Status expected:<200> but was:<404>` (no evidence endpoints) | → 4/5; a test defect (note 1); then 5/5, together with `ArchitectureTest` |
+| T102 | `LineageServiceTest` (2) | → compile error, `LineageService` missing | → 1 error, a fixture defect (note 2); then 2/2, together with `WorkflowApiTest` and `ScenarioCAmbiguousE2ETest` |
+| T103 | `FailureEventRecorderTest` (5) | **No red run (verification test).** The recorder was implemented with the engine in Phase 6, before this test; that implementation was not test-first | → 5/5 on the first run, after fixing a compile error in the test (wrong enum constant names) |
+| T104 | `ReliabilityReportServiceTest` (5) | → compile error, `ReliabilityCalculator` missing | → 4/5, a test defect (note 3); then 5/5 |
+| T105 | `ReliabilityDrillsE2ETest` step 7 | N/A (an evidence export; the step asserts the report against its own listed durations) | → 7/7; report exported and hand-checked in `mttr-validation.md` |
+| T106 | `MetricsTest` (4) | → 4 tests, 3 failures (meters not registered). The run-id-tag guardrail test passed trivially, because no meters existed yet | → 4/4, together with `ArchitectureTest` (no new package cycles) |
+| T132 | `GovernanceInvariantsTest` (8), then every `*E2ETest` | Checker proven against violating fixtures: first run 7/8. The failing negative fixture exposed a checker leniency (note 4) | → 8/8; then `GovernanceInvariantsTest,*E2ETest` → 8 + 7 + 1 + 1 + 1 green, and the invariants hold on all 10 real runs |
+| T108 | `TraceabilityMatrixTest` (5) | Verification test. First run: error `No group 1` in the test's regex helper (a test defect); fixed | → 5/5. **Detection proven:** a planted tag `FR-LNK-99` failed it (`Expecting empty but was: [...LineageServiceTest.java: FR-LNK-99]`); the tag was then removed |
+
+**Notes**
+
+1. **Test defect:** the summary test expected the run id inside the Markdown. Scripted agents write
+   the placeholder `# scripted FINAL_SUMMARY`. The test now asserts that the endpoint returns the
+   stored artifact verbatim.
+2. **Fixture defect:** two `REQUIREMENT` artifacts were given version 1, which violates the
+   `uk_artifact_version` unique index. They are now versions 1 and 2.
+3. **Test defect:** the MTTR formula assertion used lower case ("recovered") against the upper-case
+   formula text.
+4. **Checker leniency found by a negative fixture:** the first checker enforced a gate only after
+   its first audit event, so a stage started before the architecture gate ever transitioned went
+   unreported. Only `CHANGE_APPROVAL` is inserted mid-run, so every other gate is now enforced from
+   the start of the run.
+5. **Traceability gaps made explicit:**
+   - FR-ORC-18 (autonomy budget, T074) and FR-RPL-06 (late ambiguity, T096) have no tests. They are
+     listed as DEFERRED (SD-1) in the test and in the generated matrix, not hidden. The test fails
+     once either gains a test, so the deferral list cannot go stale.
+   - Nine NFR and success-criterion ids have no tag and are reported as `NO TEST` in the matrix.

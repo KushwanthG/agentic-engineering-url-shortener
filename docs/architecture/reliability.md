@@ -144,3 +144,45 @@ policy evaluations caused by a fault are flagged simulated, and the run view sho
   deferred by scope decision SD-1. Policy AUT-001 reports budget usage as an advisory only.
 - **Scheduler restarts.** Wake-ups are scheduled in memory. After a restart, `RecoveryService`
   re-schedules them.
+
+## 10. Observability and the reliability report (FR-AUD-04, NFR-OBS-02)
+
+**Meters.** The meters are exported through Micrometer to `/actuator/prometheus` (auditor role):
+
+| Meter | Kind | Tags |
+|---|---|---|
+| `sdlc.runs.started` | counter | none |
+| `sdlc.runs.terminated` | counter | `outcome` |
+| `sdlc.stage.attempts` | counter | `stage`, `outcome` |
+| `sdlc.stage.retries` | counter | `stage` |
+| `sdlc.stage.fallbacks` | counter | `stage` |
+| `sdlc.stage.duration` | timer | `stage` |
+| `sdlc.compensations` | counter | `result` |
+| `sdlc.gates.waiting` | gauge | none |
+| `sdlc.executor.active` | gauge | none |
+| `shortener.links.created` | counter | none |
+| `shortener.redirects` | counter | `outcome` |
+| `shortener.analytics.failures` | counter | none |
+| `shortener.ratelimit.rejected` | counter | `limiter` |
+
+- Tags are bounded enumerations. A run id is never a tag; `MetricsTest` asserts this.
+- Control-plane meters are recorded after the transaction commits.
+- `shortener.links.created` counts API creations only, not the synthetic links that probes create.
+
+**Traces.** Each attempt runs inside an `sdlc.stage` Micrometer observation. Its low-cardinality
+key is `stage`; its high-cardinality keys are `runId` and `attempt`. The persisted timeline is the
+trace that reviewers use.
+
+**Logs.** Logs carry `runId`, `stage`, and `attempt` in the MDC. The console pattern prints them.
+
+**Reliability report.** `GET /api/v1/reliability/report` is computed on request from the database
+by `ReliabilityCalculator`, a pure function that is tested with hand-computed fixtures. It reports:
+- success and failure rates, and retry, fallback, compensation, and rollback frequencies;
+- MTTR: recovered episodes only, with every duration listed;
+- unrecovered failures, which are listed and kept out of the MTTR denominator;
+- exclusions (open episodes and superseded episodes), with counts;
+- end-to-end latency with human wait excluded.
+
+Every report carries the label `DEMONSTRATION DATA - not production statistics`. The drill suite
+exports the report after the drills, and [mttr-validation.md](../assessment/mttr-validation.md)
+reproduces its MTTR by hand.

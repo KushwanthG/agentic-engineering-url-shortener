@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.agentic.urlshortener.common.exception.ApiException;
 import com.agentic.urlshortener.common.security.ApiPrincipal;
+import com.agentic.urlshortener.shortener.ShortenerMeters;
 import com.agentic.urlshortener.shortener.config.RateLimiters;
 import com.agentic.urlshortener.shortener.dto.CreateLinkCommand;
 import com.agentic.urlshortener.shortener.dto.CreateLinkRequest;
@@ -38,8 +39,10 @@ public class LinkController {
     private final LinkCreationService creation;
     private final LinkQueryService queries;
     private final RateLimiters rateLimiters;
+    private final ShortenerMeters meters;
 
-    public LinkController(LinkCreationService creation, LinkQueryService queries, RateLimiters rateLimiters) {
+    public LinkController(LinkCreationService creation, LinkQueryService queries, RateLimiters rateLimiters, ShortenerMeters meters) {
+        this.meters = meters;
         this.creation = creation;
         this.queries = queries;
         this.rateLimiters = rateLimiters;
@@ -51,6 +54,7 @@ public class LinkController {
             @AuthenticationPrincipal ApiPrincipal principal) {
         TokenBucketRateLimiter.Decision decision = rateLimiters.creation().tryAcquire(principal.id());
         if (!decision.allowed()) {
+            meters.rateLimited(ShortenerMeters.CREATION_LIMITER);
             throw ApiException.rateLimited("Link creation limit reached for this consumer; retry later.",
                     decision.retryAfterSeconds());
         }
@@ -59,6 +63,8 @@ public class LinkController {
         ResponseEntity.BodyBuilder response = ResponseEntity.created(URI.create("/api/v1/links/" + created.view().code()));
         if (created.replayed()) {
             response.header(IDEMPOTENCY_REPLAYED, "true");
+        } else {
+            meters.linkCreated();
         }
         return response.body(LinkResponse.from(created.view()));
     }

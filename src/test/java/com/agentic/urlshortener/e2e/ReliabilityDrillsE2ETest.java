@@ -26,6 +26,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 
 import com.agentic.urlshortener.common.util.CanonicalJson;
+import com.agentic.urlshortener.support.GovernanceInvariants;
 import com.agentic.urlshortener.support.EvidenceExporter;
 import com.agentic.urlshortener.support.HttpDriver;
 import com.agentic.urlshortener.support.Tokens;
@@ -117,6 +118,7 @@ class ReliabilityDrillsE2ETest {
         approve(run, "ARCHITECTURE_APPROVAL", Tokens.APPROVER);
         approve(run, "RELEASE_APPROVAL", Tokens.RELEASE_OWNER);
         JsonNode result = http.awaitTerminal(run);
+        GovernanceInvariants.assertHold(http, run);
 
         assertThat(result.path("status").asString()).isEqualTo("SAFE_STOPPED");
         assertThat(result.path("terminalReason").asString()).contains("RELEASE").contains("rolled back to released=false");
@@ -138,6 +140,7 @@ class ReliabilityDrillsE2ETest {
         approve(run, "ARCHITECTURE_APPROVAL", Tokens.APPROVER);
         approve(run, "RELEASE_APPROVAL", Tokens.RELEASE_OWNER);
         JsonNode result = http.awaitTerminal(run);
+        GovernanceInvariants.assertHold(http, run);
 
         assertThat(result.path("status").asString()).isEqualTo("COMPLETED");
         List<JsonNode> testing = timelineOf(run, "TESTING");
@@ -157,6 +160,7 @@ class ReliabilityDrillsE2ETest {
         assertThat(http.run(run).path("readiness").asString()).isEqualTo("READY_WITH_ACCEPTED_LIMITATIONS");
         approve(run, "RELEASE_APPROVAL", Tokens.RELEASE_OWNER);
         JsonNode result = http.awaitTerminal(run);
+        GovernanceInvariants.assertHold(http, run);
 
         assertThat(result.path("status").asString()).isEqualTo("COMPLETED");
         assertThat(timelineOf(run, "DOCUMENTATION")).extracting(e -> e.path("fallback").asBoolean()).containsExactly(false, true);
@@ -175,6 +179,7 @@ class ReliabilityDrillsE2ETest {
         String run = submitWith("{\"gateDeadlineSeconds\":2,\"faults\":[]}");
         http.awaitPendingAction(run, "ARCHITECTURE_APPROVAL");
         JsonNode result = http.awaitTerminal(run);
+        GovernanceInvariants.assertHold(http, run);
 
         assertThat(result.path("status").asString()).isEqualTo("SAFE_STOPPED");
         assertThat(result.path("terminalReason").asString()).contains("deadline").contains("not approved by default");
@@ -207,6 +212,7 @@ class ReliabilityDrillsE2ETest {
         assertThat(decision.statusCode()).as(decision.body()).isEqualTo(200);
         approve(approved, "RELEASE_APPROVAL", Tokens.RELEASE_OWNER);
         JsonNode completed = http.awaitTerminal(approved);
+        GovernanceInvariants.assertHold(http, approved);
         assertThat(completed.path("status").asString()).isEqualTo("COMPLETED");
         assertThat(completed.path("readiness").asString()).isEqualTo("READY_WITH_ACCEPTED_LIMITATIONS");
         List<String> doc001 = new ArrayList<>();
@@ -225,6 +231,7 @@ class ReliabilityDrillsE2ETest {
         http.send("POST", rejected + "/policy-exceptions/" + rejectedId + "/decision", Tokens.APPROVER,
                 CanonicalJson.write(Map.of("decision", "REJECT", "rationale", "compensating control insufficient" + SIMULATED)));
         JsonNode stopped = http.awaitTerminal(rejected);
+        GovernanceInvariants.assertHold(http, rejected);
         assertThat(stopped.path("status").asString()).isEqualTo("SAFE_STOPPED");
 
         Map<String, Object> record = new LinkedHashMap<>();
@@ -256,8 +263,44 @@ class ReliabilityDrillsE2ETest {
         assertThat(HttpDriver.json(stopped).path("status").asString()).isEqualTo("SAFE_STOPPED");
         assertThat(HttpDriver.json(stopped).path("terminalReason").asString()).contains("carol").contains("change freeze");
         assertThat(decisionTypes(run)).contains("OPERATOR_ACTION", "SAFE_STOP");
+        GovernanceInvariants.assertHold(http, run);
 
         evidence.json("RDR-07-operator-controls", record("RDR-07 pause, resume, safe-stop by the release owner", run,
                 HttpDriver.json(stopped)));
+    }
+
+    /**
+     * T105 (FR-AUD-04, SC-008): after the drills, the reliability report is computed from the recorded
+     * evidence. Its MTTR reproduces from its own listed durations. The drills' retry (RDR-01) and
+     * fallback (RDR-02) recoveries appear as mechanisms, and the unrecovered post-release verification
+     * failure (RDR-03) is listed, not averaged in. Exported for docs/assessment/mttr-validation.md.
+     */
+    @Test
+    @Order(7)
+    void theReliabilityReportAfterTheDrillsIsReproducibleFromItsEvidence() {
+        JsonNode report = http.get("/api/v1/reliability/report", Tokens.AUDITOR);
+        assertThat(report.path("label").asString()).isEqualTo("DEMONSTRATION DATA - not production statistics");
+
+        JsonNode mttr = report.path("mttr");
+        long total = 0;
+        for (JsonNode duration : mttr.path("recoveryDurationsMillis")) {
+            total += duration.asLong();
+        }
+        int recovered = mttr.path("recoveredEvents").asInt();
+        assertThat(recovered).isEqualTo(mttr.path("recoveryDurationsMillis").size()).isPositive();
+        assertThat(mttr.path("totalRecoveryMillis").asLong()).isEqualTo(total);
+        assertThat(mttr.path("mttrMillis").asDouble()).isEqualTo((double) total / recovered);
+        assertThat(mttr.path("byMechanism").path("RETRY").asInt()).isPositive();
+        assertThat(mttr.path("byMechanism").path("FALLBACK").asInt()).isPositive();
+
+        assertThat(report.path("unrecoveredFailures").path("count").asInt()).isPositive();
+        List<String> causes = new ArrayList<>();
+        report.path("unrecoveredFailures").path("events").forEach(e -> causes.add(e.path("cause").asString()));
+        assertThat(causes).contains("VERIFICATION_FAILURE");
+        assertThat(report.path("runs").path("safeStopped").asInt()).isPositive();
+        assertThat(report.path("compensations").path("rollbacks").asInt()).isPositive();
+        assertThat(report.path("latency").path("excludesHumanWait").asBoolean()).isTrue();
+
+        new EvidenceExporter("reliability", ReliabilityDrillsE2ETest.class, true).json("reliability-report", report);
     }
 }

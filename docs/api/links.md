@@ -62,6 +62,26 @@ released by a governed workflow run (scenario SCN-A); until then an `alias` is r
 An aliased link resolves like any other link (`GET /spring-sale` → 302). Withdrawing the capability
 stops new aliases only; existing aliases keep resolving.
 
+### Click-limited links (capability `click-limit`, contract 1.2.0)
+
+A consumer may limit how many times a link redirects with `maxClicks` once the `click-limit`
+capability has been released by a governed workflow run (scenario SCN-B). Until then, `maxClicks`
+is rejected with `422 CAPABILITY_NOT_AVAILABLE`.
+
+| Input | Result |
+|---|---|
+| `maxClicks` from 1 to 1,000,000 | the link is created with the limit; responses report `maxClicks` |
+| `maxClicks` outside 1..1,000,000 | `400 INVALID_CLICK_LIMIT` |
+| no `maxClicks` | an unlimited link, exactly as before the capability existed |
+
+How a limit is enforced:
+
+- The first `maxClicks` resolutions redirect, and every later one returns `410 LINK_EXPIRED`.
+- The metadata status becomes `EXPIRED` once the limit is used up.
+- Each click is counted with a single conditional update, so concurrent resolutions can never
+  exceed the limit.
+- Withdrawing the capability stops new limits only. Stored limits stay enforced.
+
 ### URL safety rules (no DNS resolution)
 
 Rejected with `400` and a specific code:
@@ -111,11 +131,13 @@ address or other personal data.
 |---|---|
 | active link | `302 Found`, `Location: <target>`, `Cache-Control: no-store` (every resolution reaches the service and is counted) |
 | unknown code | `404 LINK_NOT_FOUND` (a code of `[A-Za-z0-9_-]` shorter than 3 or longer than 32 characters → `404 RESOURCE_NOT_FOUND`; paths with other characters are refused by the deny-by-default security rules) |
-| expired link | `410 LINK_EXPIRED` (not counted) |
+| expired link, or a click-limited link that has used all its clicks | `410 LINK_EXPIRED` (not counted) |
 | link store unavailable | `503 STORE_UNAVAILABLE` with `Retry-After` |
 
 If recording the click fails, the redirect is still served and the failure is counted in the
-metric `shortener.analytics.failures` (fail-open; ADR-016).
+metric `shortener.analytics.failures` (fail-open; ADR-016). **Exception:** for a click-limited
+link, the redirect is refused with `503 STORE_UNAVAILABLE`, because an uncounted redirect could
+exceed the limit (fail-closed; BF-001 AC-6).
 
 ## Rate limits
 

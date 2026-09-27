@@ -51,6 +51,11 @@ public final class DeferredApplicationPlanePort implements ApplicationPlanePort 
     }
 
     @Override
+    public <T> T withSyntheticClickOutage(Supplier<T> action) {
+        return target.get().withSyntheticClickOutage(action);
+    }
+
+    @Override
     public CapabilityState setRelease(String capabilityId, boolean released, Map<String, Object> parameters, UUID runId,
             String reason) {
         return target.get().setRelease(capabilityId, released, parameters, runId, reason);

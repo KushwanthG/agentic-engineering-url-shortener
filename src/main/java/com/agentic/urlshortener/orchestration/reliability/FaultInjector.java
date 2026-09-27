@@ -177,6 +177,7 @@ public class FaultInjector {
         @Override public <T> T withPreview(String capabilityId, Map<String, Object> parameters, Supplier<T> action) {
             return port.withPreview(capabilityId, parameters, action);
         }
+        @Override public <T> T withSyntheticClickOutage(Supplier<T> action) { return port.withSyntheticClickOutage(action); }
         @Override public CapabilityState setRelease(String capabilityId, boolean released, Map<String, Object> parameters, UUID runId,
                 String reason) {
             return port.setRelease(capabilityId, released, parameters, runId, reason);

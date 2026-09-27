@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.agentic.urlshortener.orchestration.port.ProbeResponse;
+import com.agentic.urlshortener.orchestration.port.SyntheticLinkSpec;
 
 /** Security probes referenced from threat models: the malicious-URL catalog and alias route-shadowing checks. */
 final class SecurityProbes {
@@ -24,7 +25,20 @@ final class SecurityProbes {
                 new AcceptanceProbe("CA-SEC-RESERVED", "custom-alias", "reserved words cannot be used as aliases", null,
                         c -> allRejected(c, List.of("api", "actuator", "admin", "health"), "RESERVED_ALIAS")),
                 new AcceptanceProbe("CA-SEC-ROUTE", "custom-alias", "aliases cannot shadow system routes in any letter case", null,
-                        SecurityProbes::routesCannotBeShadowed));
+                        SecurityProbes::routesCannotBeShadowed),
+                new AcceptanceProbe("CL-SEC-BOUNDS", "click-limit", "click limits outside 1..1,000,000 are rejected", null,
+                        SecurityProbes::clickLimitBounds));
+    }
+
+    private static ProbeOutcome clickLimitBounds(ProbeContext context) {
+        List<String> results = new ArrayList<>();
+        boolean passed = true;
+        for (long limit : new long[] { 0, -1, 1_000_001, Long.MAX_VALUE }) {
+            ProbeResponse response = context.create(new SyntheticLinkSpec("https://www.example.com/bounds", null, limit, null));
+            passed &= "INVALID_CLICK_LIMIT".equals(response.errorCode());
+            results.add(limit + " -> " + response.errorCode());
+        }
+        return ProbeOutcome.check(passed, String.join(", ", results));
     }
 
     private static ProbeOutcome maliciousUrlsRejected(ProbeContext context) {

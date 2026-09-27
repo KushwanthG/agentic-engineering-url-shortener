@@ -292,3 +292,4 @@ and decides whether redirects may be cached.
 | Phase 5 deviations (a)–(e) (`task-group-checkpoints.md`, Phase 5 row 11), including re-opening downstream stages when an approval is invalidated | Phase 5 checkpoint | pending review |
 | Phase 6 deviations (a)–(g) (`task-group-checkpoints.md`, Phase 6 row 11), including the limitation that a capability released before a run cannot be rolled back automatically | Phase 6 checkpoint | pending review |
 | CP2 scope record (`timebox-and-scope.md`): SD-1 deferrals T074 and T096 continue | CP2 | pending confirmation at G6 |
+| Phase 7 deviations (a)–(f) (`task-group-checkpoints.md`, Phase 7 row 11), in particular the probe-only click-store outage simulation | Phase 7 checkpoint | pending review |

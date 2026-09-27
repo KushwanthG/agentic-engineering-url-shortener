@@ -16,7 +16,6 @@ import org.springframework.stereotype.Service;
 import com.agentic.urlshortener.common.exception.ApiException;
 import com.agentic.urlshortener.common.exception.ErrorCode;
 import com.agentic.urlshortener.shortener.config.ShortenerProperties;
-import com.agentic.urlshortener.shortener.domain.Capability;
 import com.agentic.urlshortener.shortener.domain.NormalizedUrl;
 import com.agentic.urlshortener.shortener.domain.ShortCodeGenerator;
 import com.agentic.urlshortener.shortener.domain.ShortLink;
@@ -40,19 +39,19 @@ public class LinkCreationService {
     private final ShortCodeGenerator generator;
     private final LinkWriter writer;
     private final IdempotencyService idempotency;
-    private final CapabilityService capabilities;
+    private final ClickLimitCapability clickLimit;
     private final CustomAliasCapability customAlias;
     private final ShortenerProperties properties;
     private final Clock clock;
 
     public LinkCreationService(UrlPolicy urlPolicy, ShortCodeGenerator generator, LinkWriter writer,
-            IdempotencyService idempotency, CapabilityService capabilities, CustomAliasCapability customAlias,
+            IdempotencyService idempotency, ClickLimitCapability clickLimit, CustomAliasCapability customAlias,
             ShortenerProperties properties, Clock clock) {
         this.urlPolicy = urlPolicy;
         this.generator = generator;
         this.writer = writer;
         this.idempotency = idempotency;
-        this.capabilities = capabilities;
+        this.clickLimit = clickLimit;
         this.customAlias = customAlias;
         this.properties = properties;
         this.clock = clock;
@@ -64,9 +63,7 @@ public class LinkCreationService {
             idempotency.validateKey(key);
         }
         String alias = command.alias() == null ? null : customAlias.require(command.alias());
-        if (command.maxClicks() != null) {
-            capabilities.requireReleased(Capability.CLICK_LIMIT, "maxClicks");
-        }
+        Long maxClicks = command.maxClicks() == null ? null : clickLimit.require(command.maxClicks());
         NormalizedUrl target = urlPolicy.validate(command.url());
         Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
         Instant expiresAt = validateExpiry(command.expiresAt(), now);
@@ -82,7 +79,7 @@ public class LinkCreationService {
         // An alias is the code chosen by the consumer: one attempt; a taken alias is a conflict, not a retry.
         int maxAttempts = alias == null ? properties.codeGenerationAttempts() : 1;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-            ShortLink link = newLink(alias == null ? generator.next() : alias, target, now, expiresAt, command);
+            ShortLink link = newLink(alias == null ? generator.next() : alias, target, now, expiresAt, command).withMaxClicks(maxClicks);
             LinkView view = LinkView.of(link, properties.baseUrl(), now);
             try {
                 writer.insert(link, key == null ? null

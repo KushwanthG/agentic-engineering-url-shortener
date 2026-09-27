@@ -25,6 +25,17 @@ public interface ShortLinkRepository extends JpaRepository<ShortLink, Long> {
     @Query("update ShortLink l set l.clickCount = l.clickCount + 1, l.lastAccessedAt = :now where l.id = :id")
     int incrementClicks(@Param("id") Long id, @Param("now") Instant now);
 
+    /**
+     * Counts one click of a click-limited link only while it is below its limit, in one statement, so
+     * concurrent redirects can never exceed the limit (BF-001 AC-3, threat TH-CL-1). Returns 1 when the
+     * click was counted, 0 when the link is exhausted (or gone).
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Transactional
+    @Query("update ShortLink l set l.clickCount = l.clickCount + 1, l.lastAccessedAt = :now "
+            + "where l.id = :id and l.maxClicks is not null and l.clickCount < l.maxClicks")
+    int incrementClicksWithinLimit(@Param("id") Long id, @Param("now") Instant now);
+
     /** Removes the verification links of one orchestration run; click events cascade in the database. */
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Transactional

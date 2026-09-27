@@ -3,6 +3,7 @@ package com.agentic.urlshortener.orchestration.agent.probes;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 import com.agentic.urlshortener.orchestration.port.ApplicationPlanePort;
 import com.agentic.urlshortener.orchestration.port.LinkSnapshot;
@@ -39,6 +40,11 @@ public final class ProbeContext {
 
     public Optional<LinkSnapshot> find(String code) {
         return port.findLink(code);
+    }
+
+    /** Runs {@code action} with the click store unavailable for this run's synthetic links (probe-only simulation). */
+    public <T> T withSyntheticClickOutage(Supplier<T> action) {
+        return port.withSyntheticClickOutage(action);
     }
 
     public ProbeResponse resolve(String code) {

@@ -41,6 +41,7 @@ import com.agentic.urlshortener.shortener.dto.CreatedLink;
 import com.agentic.urlshortener.shortener.dto.Resolution;
 import com.agentic.urlshortener.shortener.repository.ShortLinkRepository;
 import com.agentic.urlshortener.shortener.service.CapabilityService;
+import com.agentic.urlshortener.shortener.service.ClickRecorder;
 import com.agentic.urlshortener.shortener.service.LinkCreationService;
 import com.agentic.urlshortener.shortener.service.RedirectService;
 
@@ -76,7 +77,8 @@ public class InProcessApplicationPlaneAdapter implements ApplicationPlanePort {
     @Override
     public Optional<LinkSnapshot> findLink(String code) {
         return links.findByCode(code).map(link -> new LinkSnapshot(link.getCode(), link.getTargetUrl(),
-                link.statusAt(clock.instant()).name(), link.getClickCount(), link.isCustomAlias(), link.isSynthetic()));
+                link.statusAt(clock.instant()).name(), link.getClickCount(), link.isCustomAlias(), link.isSynthetic(),
+                link.getMaxClicks()));
     }
 
     @Override
@@ -87,6 +89,7 @@ public class InProcessApplicationPlaneAdapter implements ApplicationPlanePort {
                 case REDIRECT -> ProbeResponse.redirect(resolution.targetUrl());
                 case NOT_FOUND -> ProbeResponse.notFound();
                 case EXPIRED -> ProbeResponse.expired();
+                case UNAVAILABLE -> ProbeResponse.unavailable("click could not be recorded (fail closed)");
             };
         } catch (DataAccessException e) {
             return ProbeResponse.unavailable(e.getClass().getSimpleName());
@@ -151,6 +154,11 @@ public class InProcessApplicationPlaneAdapter implements ApplicationPlanePort {
     @Override
     public <T> T withPreview(String capabilityId, Map<String, Object> parameters, Supplier<T> action) {
         return capabilities.withPreview(require(capabilityId), parameters, action);
+    }
+
+    @Override
+    public <T> T withSyntheticClickOutage(Supplier<T> action) {
+        return ClickRecorder.withSyntheticOutage(action);
     }
 
     @Override

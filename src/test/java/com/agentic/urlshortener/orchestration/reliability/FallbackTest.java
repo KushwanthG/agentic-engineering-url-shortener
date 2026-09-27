@@ -84,9 +84,10 @@ class FallbackTest {
     }
 
     @Test
-    void onlyDocumentationAndTheFinalSummaryHaveFallbacks() {
+    void onlyDocumentationTheFinalSummaryAndImpactAnalysisHaveFallbacks() {
         assertThat(registry.fallback(DOCUMENTATION)).isPresent();
         assertThat(registry.fallback(FINAL_SUMMARY)).isPresent();
+        assertThat(registry.fallback(StageType.IMPACT_ANALYSIS)).isPresent();
         for (StageType verification : List.of(TESTING, StageType.SECURITY_VERIFICATION, StageType.REGRESSION_TESTING,
                 StageType.VALIDATION, StageType.COMPLIANCE_EVALUATION, StageType.RELEASE)) {
             assertThat(registry.fallback(verification)).as("fallback for %s", verification).isEmpty();

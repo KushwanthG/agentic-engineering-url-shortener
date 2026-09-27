@@ -12,13 +12,15 @@ import org.springframework.stereotype.Component;
 public class ProbeRegistry {
 
     /** Post-release smoke probe per capability: create through the released capability, then resolve. */
-    private static final Map<String, String> SMOKE = Map.of("custom-alias", "CA-P6");
+    private static final Map<String, String> SMOKE = Map.of("custom-alias", "CA-P6", "click-limit", "CL-P2");
 
     private final List<AcceptanceProbe> acceptance;
     private final List<AcceptanceProbe> all;
 
     public ProbeRegistry() {
-        this.acceptance = List.copyOf(CustomAliasProbes.all());
+        List<AcceptanceProbe> acceptanceProbes = new ArrayList<>(CustomAliasProbes.all());
+        acceptanceProbes.addAll(ClickLimitProbes.all());
+        this.acceptance = List.copyOf(acceptanceProbes);
         List<AcceptanceProbe> everything = new ArrayList<>(acceptance);
         everything.addAll(SecurityProbes.all());
         everything.addAll(RegressionProbes.all());

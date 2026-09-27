@@ -26,6 +26,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import com.agentic.urlshortener.common.util.CanonicalJson;
 import com.agentic.urlshortener.shortener.domain.Capability;
 import com.agentic.urlshortener.shortener.dto.CreateLinkCommand;
 import com.agentic.urlshortener.shortener.repository.ShortLinkRepository;
@@ -167,6 +168,43 @@ class LinkApiContractTest {
             assertContract("POST", "/api/v1/links",
                     createLink(mvc, "{\"url\":\"https://example.com\",\"alias\":\"api\"}", Tokens.CONSUMER, null), 400);
             assertContract("GET", "/" + alias, mvc.perform(get("/" + alias)).andReturn(), 302);
+        }
+    }
+
+    /** Contract 1.2.0 (T088): {@code maxClicks} input and output, INVALID_CLICK_LIMIT, 410 once exhausted. */
+    @Nested
+    @IntegrationTest
+    class ClickLimitReleased {
+
+        @Autowired
+        private MockMvc mvc;
+
+        @Autowired
+        private CapabilityService capabilities;
+
+        @BeforeEach
+        void release() {
+            capabilities.setRelease(Capability.CLICK_LIMIT, true, Map.of(), "contract-test", null, "contract test (released temporarily)");
+        }
+
+        @AfterEach
+        void withdraw() {
+            capabilities.setRelease(Capability.CLICK_LIMIT, false, Map.of(), "contract-test", null, "contract test cleanup");
+        }
+
+        @Test
+        void clickLimitResponsesMatchTheContract() throws Exception {
+            MvcResult created = createLink(mvc, "{\"url\":\"https://example.com/once\",\"maxClicks\":1}", Tokens.CONSUMER, null);
+            assertContract("POST", "/api/v1/links", created, 201);
+            org.assertj.core.api.Assertions.assertThat(created.getResponse().getContentAsString()).contains("\"maxClicks\":1");
+            String code = CanonicalJson.parse(created.getResponse().getContentAsString())
+                    .path("code").asString();
+            assertContract("GET", "/api/v1/links/" + code, mvc.perform(get("/api/v1/links/" + code)
+                    .header(HttpHeaders.AUTHORIZATION, Tokens.bearer(Tokens.CONSUMER))).andReturn(), 200);
+            assertContract("GET", "/" + code, mvc.perform(get("/" + code)).andReturn(), 302);
+            assertContract("GET", "/" + code, mvc.perform(get("/" + code)).andReturn(), 410);
+            assertContract("POST", "/api/v1/links",
+                    createLink(mvc, "{\"url\":\"https://example.com\",\"maxClicks\":0}", Tokens.CONSUMER, null), 400);
         }
     }
 

@@ -6,7 +6,9 @@ public record Resolution(Outcome outcome, String targetUrl) {
     public enum Outcome {
         REDIRECT,
         NOT_FOUND,
-        EXPIRED
+        EXPIRED,
+        /** A click-limited link whose click could not be recorded: the redirect is refused (fail closed, AC-6). */
+        UNAVAILABLE
     }
 
     public static Resolution redirect(String targetUrl) {
@@ -19,5 +21,9 @@ public record Resolution(Outcome outcome, String targetUrl) {
 
     public static Resolution expired() {
         return new Resolution(Outcome.EXPIRED, null);
+    }
+
+    public static Resolution unavailable() {
+        return new Resolution(Outcome.UNAVAILABLE, null);
     }
 }

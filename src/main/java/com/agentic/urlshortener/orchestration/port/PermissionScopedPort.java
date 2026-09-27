@@ -90,6 +90,12 @@ public final class PermissionScopedPort implements ApplicationPlanePort {
     }
 
     @Override
+    public <T> T withSyntheticClickOutage(Supplier<T> action) {
+        require(AgentPermission.PREVIEW_CAPABILITY, "withSyntheticClickOutage");
+        return delegate.withSyntheticClickOutage(action);
+    }
+
+    @Override
     public CapabilityState setRelease(String capabilityId, boolean released, Map<String, Object> parameters, UUID runId,
             String reason) {
         require(AgentPermission.CHANGE_CAPABILITY_RELEASE, "setRelease");

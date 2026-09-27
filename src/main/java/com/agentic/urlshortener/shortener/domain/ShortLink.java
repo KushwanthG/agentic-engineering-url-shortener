@@ -52,6 +52,10 @@ public class ShortLink {
     @Column(name = "custom_alias", nullable = false)
     private boolean customAlias;
 
+    /** Maximum successful redirects (click-limit capability); {@code null} means unlimited. */
+    @Column(name = "max_clicks")
+    private Long maxClicks;
+
     protected ShortLink() {
     }
 
@@ -85,13 +89,24 @@ public class ShortLink {
         return this;
     }
 
+    /** Sets the click limit of a new link (validated by the click-limit capability). */
+    public ShortLink withMaxClicks(Long limit) {
+        this.maxClicks = limit;
+        return this;
+    }
+
+    /** A click-limited link that has used all its redirects (BF-001 AC-2). */
+    public boolean isExhausted() {
+        return maxClicks != null && clickCount >= maxClicks;
+    }
+
     /** Expired at and after the expiry instant ({@code expires_at == now} is expired, FR-RED-04). */
     public boolean isExpiredAt(Instant now) {
         return expiresAt != null && !now.isBefore(expiresAt);
     }
 
     public LinkStatus statusAt(Instant now) {
-        return isExpiredAt(now) ? LinkStatus.EXPIRED : LinkStatus.ACTIVE;
+        return isExpiredAt(now) || isExhausted() ? LinkStatus.EXPIRED : LinkStatus.ACTIVE;
     }
 
     public Long getId() {
@@ -120,6 +135,10 @@ public class ShortLink {
 
     public long getClickCount() {
         return clickCount;
+    }
+
+    public Long getMaxClicks() {
+        return maxClicks;
     }
 
     public Instant getLastAccessedAt() {

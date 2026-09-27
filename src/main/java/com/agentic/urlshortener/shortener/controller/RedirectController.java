@@ -56,6 +56,8 @@ public class RedirectController {
                 throw new ApiException(ErrorCode.LINK_NOT_FOUND, "No short link exists for this code.");
             }
             case EXPIRED -> throw new ApiException(ErrorCode.LINK_EXPIRED, "This short link has expired.");
+            case UNAVAILABLE -> throw new ApiException(ErrorCode.STORE_UNAVAILABLE,
+                    "The click of this click-limited link cannot be recorded right now; retry later.");
         };
     }
 }

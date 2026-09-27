@@ -50,6 +50,7 @@ every stage, and `overrides.<STAGE_TYPE>` replaces values for one stage:
 |---|---|---|
 | `DOCUMENTATION` | `template-documenter@1.0` | template document; repository check still real; marker `degraded=true` |
 | `FINAL_SUMMARY` | `minimal-summarizer@1.0` | artifact list with fingerprints |
+| `IMPACT_ANALYSIS` | `catalog-impact-analyst@1.0` | catalog-declared impact without a source scan; policy CHG-002 then requires an exception |
 | verification stages (`TESTING`, `SECURITY_VERIFICATION`, `REGRESSION_TESTING`, `VALIDATION`, `COMPLIANCE_EVALUATION`, `RELEASE`) | none | never degrade |
 
 A permanent failure, or exhausted retries, switches the stage to its fallback **once**. The switch

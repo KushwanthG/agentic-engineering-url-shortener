@@ -18,7 +18,7 @@ public record LinkView(
 
     public static LinkView of(ShortLink link, String baseUrl, Instant now) {
         return new LinkView(link.getCode(), shortUrl(baseUrl, link.getCode()), link.getTargetUrl(), link.getCreatedAt(),
-                link.getExpiresAt(), link.statusAt(now), link.isCustomAlias(), null);
+                link.getExpiresAt(), link.statusAt(now), link.isCustomAlias(), link.getMaxClicks());
     }
 
     public static String shortUrl(String baseUrl, String code) {

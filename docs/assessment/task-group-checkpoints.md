@@ -211,3 +211,36 @@ security rules unchanged (deny-by-default; redirect route public by design); all
   already in `openapi.yaml` and are validated by the contract harness in tests.
 - **Fault injection stays off by default.** A test proves the default profile refuses faults.
 - **Tests.** All tests are green.
+
+---
+
+## Checkpoint: Phase 7 — US5 change existing behavior safely, SCN-B (T083–T090)
+
+| # | Item | Record |
+|---|------|--------|
+| 1 | Completed tasks | T083–T090 |
+| 2 | Requirements addressed | FR-ORC-14, FR-ORC-15, FR-CAP-03, FR-ANL-04 (fail-closed exception), FR-REL-03 (impact fallback), NFR-CHG-01, NFR-CHG-02, SC-002 (SCN-B), SC-009 (E-B1..E-B9) |
+| 3 | ADRs followed | ADR-017 (knowledge-driven agents, codebase scan), ADR-016 (analytics consistency: fail-closed only for limited links), ADR-018 (capability flag), ADR-010 (rollback: withdraw the flag, stored limits stay) |
+| 4 | Files created or changed | `knowledge/CodebaseScanner`; `agent/{ImpactAnalysisAgent, CatalogImpactAnalysisAgent, ImpactReports, RegressionTestingAgent}`; `agent/probes/{RegressionProbes, ClickLimitProbes}`, `SecurityProbes` (CL-SEC-BOUNDS), `ProbeRegistry`, `ProbeContext`; port `SyntheticLinkSpec` (idempotency key), `LinkSnapshot` (`maxClicks`), `ApplicationPlanePort.withSyntheticClickOutage`; shortener `V4__click_limit.sql`, `ShortLink`, `ShortLinkRepository`, `ClickRecorder`, `RedirectService`, `RedirectController`, `Resolution`, `LinkView`, `LinkCreationService`, `ClickLimitCapability`; catalog regression risks; `res/scenarios/scn-b-brownfield.json`; docs `scn-b-impact-analysis.md` (gate), `scn-b-brownfield.md`, `docs/api/links.md`, `reliability.md` |
+| 5 | Tests written before implementation | T083–T085, T087, T089 (red recorded); T086 is analysis; T088 is the green step |
+| 6 | Expected initial failures | missing scanner and agents; SCN-B refused at `IMPLEMENTATION` (capability not delivered); limits neither stored nor enforced |
+| 7 | Validation commands executed | see `tdd-evidence.md` Phase 7; two full `mvnw verify` runs |
+| 8 | Actual outcomes | 462 tests green; SCN-B `COMPLETED`/`READY`, all 14 policies `PASS`; SCN-A still green |
+| 9 | Documentation updated | see row 4 |
+| 10 | Traceability updated | tests tagged FR-ORC-14/15, FR-CAP-03, SCN-B; tasks marked |
+| 11 | Deviations from plan | (a) **Probe-only outage simulation.** Needed to verify AC-6 live: a thread-scoped click-store outage (`ApplicationPlanePort.withSyntheticClickOutage`, permission `PREVIEW_CAPABILITY`) that affects only synthetic links on the probing thread. It is a new port operation; plan and contract are unchanged. (b) **Regression risks in the catalog.** Added as reviewable knowledge (plan §11 names them); the agent does not invent them. (c) **Regression probes for click-limit** extended from R-P1..R-P4 to R-P1..R-P6 (statistics and idempotent replay are in the impact closure). (d) **Impact-analysis fallback.** `IMPACT_ANALYSIS` has a catalog-only fallback (plan §3 table); `FallbackTest` and `reliability.md` were updated. (e) **Two commits in this phase.** The gate commit had to precede V4 (T086 guardrail). (f) **Idempotency residue.** Synthetic-link cleanup leaves the probe's idempotency records with `link_id` set to null (FK `ON DELETE SET NULL`); they hold no link data |
+| 12 | New risks | the thread-scoped outage simulation is test machinery in production code; it is confined to synthetic links and a permission-checked port call |
+| 13 | New assumptions | a click-limited link's click is either counted or refused, never served uncounted |
+| 14 | Remaining failures | none |
+| 15 | Commit boundary | Phase 7 (second commit after the gate commit `53d8fc4`) |
+| 16 | Commit message | `feat(shortener): add click-limited links through the SCN-B brownfield workflow` |
+| 17 | Next task group | Phase 8 US6 — SCN-C ambiguous requirement, clarification, re-planning (T091–T100; T096 deferred) |
+| 18 | Human approval required | **the impact analysis review (T086) is PENDING**; deviations (a)–(f) for review |
+
+**Pre-commit review**:
+- The click-limit change is additive: a nullable column, and unlimited links keep their exact code
+  path.
+- Contract 1.2.0 already declared the fields, and the contract test covers them.
+- The brownfield gate order is visible in `git log`.
+- SCN-A still passes as the regression guard.
+- All tests are green.

@@ -35,6 +35,15 @@ public interface ApplicationPlanePort {
     /** PREVIEW_CAPABILITY: runs {@code action} with the capability enabled for the calling thread only. */
     <T> T withPreview(String capabilityId, Map<String, Object> parameters, Supplier<T> action);
 
+    /**
+     * PREVIEW_CAPABILITY (probes only): runs {@code action} with the click store unavailable for the
+     * run's synthetic links on the calling thread, to verify fail-closed behavior (BF-001 AC-6).
+     * Consumer links and other threads are never affected.
+     */
+    default <T> T withSyntheticClickOutage(Supplier<T> action) {
+        throw new UnsupportedOperationException("click-store outage simulation is not supported by this port");
+    }
+
     /** CHANGE_CAPABILITY_RELEASE (release stage only): sets (not toggles) the release state; idempotent. */
     CapabilityState setRelease(String capabilityId, boolean released, Map<String, Object> parameters, UUID runId, String reason);
 }

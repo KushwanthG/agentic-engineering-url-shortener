@@ -56,8 +56,11 @@ public class RedirectService {
         }
         ShortLink link = found.get();
         Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
-        if (link.isExpiredAt(now)) {
+        if (link.isExpiredAt(now) || link.isExhausted()) {
             return Resolution.expired();
+        }
+        if (link.getMaxClicks() != null) {
+            return resolveLimited(link, code, now, referrer);
         }
         try {
             clickRecorder.record(link.getId(), now, referrerHost(referrer));
@@ -66,6 +69,24 @@ public class RedirectService {
             log.warn("Click for code {} not recorded ({}); redirect served (fail-open)", code, e.getClass().getSimpleName());
         }
         return Resolution.redirect(link.getTargetUrl());
+    }
+
+    /**
+     * Click-limited links (BF-001): the click is counted atomically only while below the limit, so a
+     * redirect happens only if it was counted; the resolution after the last allowed click is expired.
+     * If the click cannot be recorded, the redirect is refused (fail closed, AC-6): serving it
+     * uncounted could exceed the limit.
+     */
+    private Resolution resolveLimited(ShortLink link, String code, Instant now, String referrer) {
+        boolean counted;
+        try {
+            counted = clickRecorder.recordWithinLimit(link.getId(), link.isSynthetic(), now, referrerHost(referrer));
+        } catch (RuntimeException e) {
+            analyticsFailures.increment();
+            log.warn("Click for limited code {} not recorded ({}); redirect refused (fail-closed)", code, e.getClass().getSimpleName());
+            return Resolution.unavailable();
+        }
+        return counted ? Resolution.redirect(link.getTargetUrl()) : Resolution.expired();
     }
 
     /** Reduces a Referer header to its lower-case host; anything else is discarded (FR-ANL-02). */

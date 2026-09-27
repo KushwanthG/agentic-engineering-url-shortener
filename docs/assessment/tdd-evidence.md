@@ -186,3 +186,28 @@ existing behavior.
 
 **Final green**: 18:16 `mvnw -B -ntp verify` (online) → 444 tests, 0 failures, 0 errors, SBOM
 generated, BUILD SUCCESS.
+
+## Phase 7 — US5 change existing behavior safely, SCN-B (T083–T090)
+
+Times are UTC on 2026-09-27.
+
+| Tasks | Test(s) | Red run (command → observed failure) | Green run (command → result) |
+|-------|---------|--------------------------------------|------------------------------|
+| T083 | `CodebaseScannerTest` (4) with the fixture tree `src/test/resources/codebase-fixture/` | 02:40 `mvnw test-compile` → exit 1, `CodebaseScanner` missing | 02:40 `-Dtest=CodebaseScannerTest` → 4/4 |
+| T084 | `ImpactAnalysisAgentTest` (2) | 02:42 `mvnw test-compile` → exit 1, `ImpactAnalysisAgent`, `CatalogImpactAnalysisAgent` missing | 02:43 `-Dtest=ImpactAnalysisAgentTest,CapabilityCatalogTest,DesignAgentTest,FallbackTest` → 15/15 |
+| T085 | `RegressionTestingAgentTest` (2) | 02:45 `mvnw test-compile` → exit 1, `RegressionTestingAgent` missing | 02:46 (with the other probe-agent tests) → 8/8 |
+| T086 | `BrownfieldImpactGateIT` (1), analysis only | — | 02:47 → 1/1; 02:49 `mvnw verify` → 453/453. Analysis committed as `53d8fc4` **before** V4 |
+| T089 | `ScenarioBBrownfieldE2ETest` (1) | 02:52 → **expected behavioral red**: "run ended before RELEASE_APPROVAL: SAFE_STOPPED — stage IMPLEMENTATION failed: capability click-limit is not delivered in the running system: [MIGRATION_APPLIED: Flyway history does not contain a successful migration V4]" (FR-ORC-15) | 03:00 → 1/1 (after T088; see note 2) |
+| T087 | `ClickLimitTest` (6), `ClickLimitConcurrencyTest` (1) | 02:54 `mvnw test-compile` → `recordWithinLimit` missing; a placeholder was added so the red is behavioral. 02:54 → 7 tests, 5 failures: `No value at JSON path "$.maxClicks"`, `Status expected:<400> but was:<201>`, `expected:<503> but was:<302>`, `expected:<410> but was:<302>`, and concurrency above the limit | 02:58 (with `MigrationTest`, `LinkCreationServiceTest`, `RedirectServiceTest`, `RedirectControllerTest`, `IdempotencyServiceTest`) → 35/35 |
+| T088 | `LinkApiContractTest$ClickLimitReleased` (1) | — (contract fields already declared in 1.2.0) | 03:01 `mvnw verify` → 462/462 |
+
+**Notes**
+
+1. **Test adjustment:** the recorder method signature was settled during implementation as
+   `recordWithinLimit(long, boolean synthetic, Instant, String)`, and the `ClickLimitTest` stub
+   matcher was updated to match. The assertions did not change.
+2. **Test defect:** the first green attempt of SCN-B (02:59) completed the run, then failed in the
+   test itself. `Set.of(3, 3, 3)` throws on duplicates, and equal scheduling cycles are exactly the
+   expected outcome. Fixed with a distinct count, plus a null guard.
+
+**Final green**: 03:01 `mvnw -B -ntp verify` (online) → 462 tests, 0 failures, 0 errors, BUILD SUCCESS.

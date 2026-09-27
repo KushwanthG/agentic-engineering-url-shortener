@@ -1,0 +1,17 @@
+{
+  "ref": "BF-001",
+  "title": "Click-limited short links.",
+  "type": "CHANGE_TO_EXISTING",
+  "narrative": "As an API consumer, I want to limit how many times a short link can be used so that I can share one-time or limited-use links.",
+  "acceptanceCriteria": [
+    "Given the capability is released, when a link is created with a maximum of 2 clicks, then the link is created and reports its click limit.",
+    "Given a link with a maximum of 2 clicks, when it is resolved 3 times, then the first 2 resolutions redirect and the third returns the expired outcome.",
+    "Given a link with a maximum of N clicks resolved concurrently by more than N clients, then exactly N resolutions redirect.",
+    "Given a link created before the capability was released, when it is resolved, then it continues to redirect without a limit.",
+    "Given a click limit outside 1 to 1,000,000, when a link is created, then creation is rejected with error code `INVALID_CLICK_LIMIT`.",
+    "Given a click-limited link whose click cannot be recorded, when it is resolved, then the redirect is refused with a temporarily-unavailable outcome."
+  ],
+  "constraints": [
+    "Existing links and consumers that do not use the limit must be unaffected; the change must be reversible without data loss."
+  ]
+}

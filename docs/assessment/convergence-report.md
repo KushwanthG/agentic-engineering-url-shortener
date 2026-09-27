@@ -13,7 +13,7 @@ The skill found 7 findings. Four were appended as **Phase 11: Convergence** (T13
 | F1 | contradicts | **CRITICAL** | Constitution V (no credentials in logs) | Spring Boot's generated default-user password was logged at every startup (seen in the T120 demo log). **Fixed**: T133, commit `2a2a0bf`, `StartupLogSecurityTest` (red, then green) |
 | F2 | missing | HIGH | FR-ORC-18 | Deferred: T074 (SD-1) |
 | F3 | missing | HIGH | FR-RPL-06 | Deferred: T096 (SD-1) |
-| F4 | partial | HIGH | Constitution V (dependency-risk check), NFR-SEC-05 | Existing open task T128 (scanner not installed) |
+| F4 | partial | HIGH | Constitution V (dependency-risk check), NFR-SEC-05 | T128 (existing task). Afterwards: scan run, 3 CRITICAL Tomcat 11.0.24 advisories, not reachable by analysis, not fixed (T128 descoped by the candidate) |
 | F5 | partial | MEDIUM | NFR-PRF-01 | T134, **open**: see [performance.md](performance.md) |
 | F6 | missing | MEDIUM | ADR-015 mitigation (demo startup warning) | **Fixed**: T135, `DemoProfileWarning` |
 | F7 | partial | LOW | SC-001 (quickstart accuracy) | **Fixed**: T136, `quickstart.md` corrected |

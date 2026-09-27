@@ -41,27 +41,39 @@ entry that no longer matches fails the test:
 secret, and it does not scan git history. The history is short and local, and no secret was ever
 committed to it by this workflow.
 
-## 2. Dependency vulnerability scan (T128, NFR-SEC-05): NOT executed — release limitation
+## 2. Dependency vulnerability scan (T128, NFR-SEC-05): run once; findings accepted, not remediated
 
-**Planned command.** Run OSV-Scanner, at a pinned release, against the CycloneDX SBOM that the build
-produces:
+**Scope decision.** On 2026-09-27 the candidate removed T128 from the assignment's scope:
+"dont override the tomcat as its too much for assignment... remove that T128 from task". The scan
+had already been run once. Its results are recorded below, as found, so that nothing is hidden.
+
+**Command and tool.** OSV-Scanner **v2.6.0** (commit `e840a6e`), downloaded from the official
+GitHub release; its SHA256 matched the published `osv-scanner_SHA256SUMS`. It scanned the CycloneDX
+1.6 SBOM of commit `2ba5823` (104 components) on 2026-09-27:
 
 ```powershell
-.\mvnw.cmd -B -ntp verify                      # online: writes target/classes/META-INF/sbom/application.cdx.json
-osv-scanner scan --sbom target/classes/META-INF/sbom/application.cdx.json
+osv-scanner scan source -L target/classes/META-INF/sbom/application.cdx.json --format table
 ```
 
-**Status: not run.** OSV-Scanner is not installed in this environment. Installing a third-party
-binary was left for the candidate's approval, so there are **no findings to report, and the absence
-of findings is not evidence of absence**.
+**Result.** 1 package is affected by **3 known vulnerabilities, all rated CRITICAL**, and no other
+findings:
 
-**SBOM available.** The SBOM is CycloneDX 1.6 with 104 components. The main runtime components are:
-- Spring Boot 4.1.1 (web MVC, embedded Tomcat, actuator, data JPA, security);
-- Jackson 3.1.5;
-- Logback 1.5.38;
-- SnakeYAML 2.6;
-- H2.
+| Advisory | CVSS | Component | Issue | Reachability in this application |
+|---|---|---|---|---|
+| GHSA-9xv2-5v5q-p794 / CVE-2026-65905 | 9.8 | `tomcat-embed-core` 11.0.24 (managed by Spring Boot 4.1.1) | Replay attack in Tomcat's **DIGEST** authenticator | **Not reachable (by analysis).** No Tomcat authenticator or realm is configured; authentication is the Spring Security bearer-token filter |
+| GHSA-gcx9-497g-6cp6 / CVE-2026-65182 | 9.1 | same | Bypass of servlet `<security-constraint>` ordering | **Not reachable (by analysis).** There are no servlet security constraints; Spring Security's filter chain does all authorization |
+| GHSA-h3x4-894j-xpx5 / CVE-2026-68525 | 9.1 | same | Bypass in Tomcat **FORM** authentication | **Not reachable (by analysis).** FORM login is disabled (`formLogin(...disable())` in `SecurityConfig`) |
 
-**Disposition.** The dependency scan is a release limitation. Under constitution V it needs the
-candidate's exception at G6, or the scan must be run and its findings dispositioned first. Any
-HIGH or CRITICAL finding blocks the readiness proposal (T122) until it is dispositioned.
+**What the scanner reported and what is known.**
+- The scanner printed no fixed version (`--`).
+- The advisories themselves name **Tomcat 11.0.25** as the fix, and Maven Central also has 11.0.26.
+- Setting `<tomcat.version>11.0.26</tomcat.version>` was tried: it built green (530 tests) and the
+  SBOM showed 11.0.26. The change was **reverted** at the candidate's request and is **not** in the
+  repository.
+
+**Disposition: accepted by the candidate, not remediated.**
+- The reachability conclusions come from reading the configuration; no test proves them.
+- Constitution V requires dependency-risk checks before release. The check ran. Shipping with known
+  CRITICAL advisories is a risk that only the candidate can accept, at gate G6.
+- **Production recommendation:** override `tomcat.version` to ≥ 11.0.25, or move to a Spring Boot
+  patch release that manages a fixed Tomcat, and scan in CI.

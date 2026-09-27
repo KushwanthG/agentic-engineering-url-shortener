@@ -30,7 +30,7 @@ labeled demo principals.
   ([release-readiness.md](release-readiness.md)). The reasons are:
   - G1–G7 are unratified and all ADRs are `Proposed` [Blocker: the candidate's action];
   - FR-ORC-18 and FR-RPL-06 are not implemented [Deferred];
-  - the dependency scan was not run [Blocker];
+  - the dependency scan found 3 CRITICAL Tomcat advisories, which are not remediated [Blocker];
   - the performance targets were missed [Measurement].
 
 ## 2. Project objective, scope, and 2–3-day timebox outcome
@@ -146,7 +146,7 @@ matrices, agent permissions, and audit tamper detection [Confirmed].
   violation). It was fixed by T133 and verified by `StartupLogSecurityTest` (red, then green)
   [Confirmed].
 - The secret scan passes with 0 unexplained findings.
-- The **dependency scan was not run** (T128) [Blocker].
+- The **dependency scan** (OSV-Scanner v2.6.0) found 3 CRITICAL advisories in Tomcat 11.0.24. By analysis none is reachable; they were not remediated, because T128 was descoped by the candidate [Blocker: acceptance at G6].
 
 **Residual risks** are in the [risk register](risk-register.md): no URL reputation scanning,
 failed authentication not throttled (L7), no autonomy budget [Limitation].
@@ -269,7 +269,7 @@ A planted typo was detected [Confirmed].
 
 **Limitations [Limitation]:**
 - performance targets not met, and T134 is open;
-- dependency scan not run;
+- known CRITICAL Tomcat advisories, not remediated (T128 descoped);
 - single process: locks, scheduler, and H2 (see
   [overview §5](../architecture/overview.md) for the scaling path);
 - compensation cannot restore a capability released before the run;
@@ -298,14 +298,14 @@ decisions, not defects hidden in the code.
 
 **Unresolved blockers [Blocker]:**
 1. Ratify G1–G5 and decide each ADR: the candidate.
-2. Run the dependency scan (T128), or grant an exception.
+2. Accept the 3 CRITICAL Tomcat advisories at G6 (T128 descoped), or upgrade Tomcat to ≥ 11.0.25.
 3. Decide on FR-ORC-18 and FR-RPL-06: implement T074 (about 45 min) and T096 (about 2 h), or
    accept them at G6.
 4. Accept the performance miss (T134), or have it profiled and fixed.
 5. Review the deviations in the gate register.
 
 **Recommended next actions [Recommendation]:**
-- Before submission: T074, T128, then G6/T125 and G7/T126 (tag `assessment-submission-v1.0`).
+- Before submission: T074, then G6/T125 and G7/T126 (tag `assessment-submission-v1.0`).
 - For production:
   - PostgreSQL with database locks and leader-elected scheduling;
   - an identity provider;

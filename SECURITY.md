@@ -36,7 +36,7 @@ actuator endpoints require the auditor role.
 See [security-scans.md](docs/assessment/security-scans.md).
 
 - **Repository secret scan:** passing, with 0 unexplained findings.
-- **Dependency vulnerability scan:** **not run** yet (T128). This is a release limitation.
+- **Dependency vulnerability scan:** OSV-Scanner v2.6.0 found **3 CRITICAL** advisories in the embedded Tomcat 11.0.24. None is reachable by analysis (DIGEST auth, FORM auth, and servlet security constraints are not used). They are **not fixed** (T128 was removed from scope by the candidate); the fix is Tomcat ≥ 11.0.25.
 
 ## Residual risks
 
@@ -49,7 +49,7 @@ These are tracked in the [risk register](docs/assessment/risk-register.md).
   per-stage retry and timeout limits and by the bounded agent pool.
 - **Bearer tokens stand in for an identity provider** (ASM-02). There is no token expiry or
   rotation.
-- **Dependencies are not yet scanned for known vulnerabilities** (T128).
+- **Known CRITICAL advisories in the embedded Tomcat 11.0.24** (CVE-2026-65905, CVE-2026-65182, CVE-2026-68525). Not reachable by analysis, and not remediated.
 
 ## Reporting a vulnerability
 

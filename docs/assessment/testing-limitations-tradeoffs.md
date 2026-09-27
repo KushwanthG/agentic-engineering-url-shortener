@@ -44,7 +44,7 @@ walking skeleton.
 
 **Not demonstrated or not run:**
 - **NFR-PRF-01.** The latency targets were not reliably met ([performance.md](performance.md)).
-- **Dependency vulnerability scan (T128).** Not run ([security-scans.md](security-scans.md)).
+- **Dependency vulnerabilities (T128, descoped).** One scan found 3 CRITICAL Tomcat advisories; they are not remediated ([security-scans.md](security-scans.md)).
 - **Deferred tasks (SD-1):**
   - JaCoCo coverage gate (T115). The report is produced; the ≥ 80% threshold is not enforced.
   - Extensibility test (T114).
@@ -67,6 +67,10 @@ walking skeleton.
 - **Compensation.** A capability that was already released before the run cannot be restored,
   because the release record holds no previous parameters. This is reported as needing manual
   intervention.
+- **Refused requests in the audit trail.** A request refused by the URL role check (for example, a
+  requester calling a gate decision, which returns `403`) is rejected before it reaches the workflow,
+  so it leaves **no entry in the run's audit trail**. Only separation-of-duties refusals are audited
+  (`DECISION_REFUSED`). Found during a manual walkthrough on 2026-09-27.
 - **Change control.** After a rejected material change, a further material change request on the
   same run is refused (409).
 - **Demonstration data.** Metrics and MTTR come from synthetic workloads with injected faults. The

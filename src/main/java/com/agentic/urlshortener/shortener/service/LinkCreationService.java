@@ -40,18 +40,21 @@ public class LinkCreationService {
     private final LinkWriter writer;
     private final IdempotencyService idempotency;
     private final ClickLimitCapability clickLimit;
+    private final DefaultExpiryCapability defaultExpiry;
     private final CustomAliasCapability customAlias;
     private final ShortenerProperties properties;
     private final Clock clock;
 
     public LinkCreationService(UrlPolicy urlPolicy, ShortCodeGenerator generator, LinkWriter writer,
-            IdempotencyService idempotency, ClickLimitCapability clickLimit, CustomAliasCapability customAlias,
+            IdempotencyService idempotency, ClickLimitCapability clickLimit, DefaultExpiryCapability defaultExpiry,
+            CustomAliasCapability customAlias,
             ShortenerProperties properties, Clock clock) {
         this.urlPolicy = urlPolicy;
         this.generator = generator;
         this.writer = writer;
         this.idempotency = idempotency;
         this.clickLimit = clickLimit;
+        this.defaultExpiry = defaultExpiry;
         this.customAlias = customAlias;
         this.properties = properties;
         this.clock = clock;
@@ -66,7 +69,8 @@ public class LinkCreationService {
         Long maxClicks = command.maxClicks() == null ? null : clickLimit.require(command.maxClicks());
         NormalizedUrl target = urlPolicy.validate(command.url());
         Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
-        Instant expiresAt = validateExpiry(command.expiresAt(), now);
+        Instant expiresAt = command.expiresAt() != null ? validateExpiry(command.expiresAt(), now)
+                : defaultExpiry.defaultExpiry(now).orElse(null);
 
         String fingerprint = key == null ? null : IdempotencyService.fingerprint(command);
         if (key != null) {

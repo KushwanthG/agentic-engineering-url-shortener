@@ -83,7 +83,8 @@ final class ClickLimitProbes {
             }
             long counted = context.find(code).map(LinkSnapshot::clickCount).orElse(-1L);
             return ProbeOutcome.check(redirected == limit && counted == limit,
-                    clients + " concurrent resolutions of a " + limit + "-click link -> " + redirected + " redirects, click count " + counted);
+                    clients + " concurrent resolutions of a " + limit + "-click link -> " + redirected + " redirects, click count "
+                            + counted);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return ProbeOutcome.fail("interrupted");

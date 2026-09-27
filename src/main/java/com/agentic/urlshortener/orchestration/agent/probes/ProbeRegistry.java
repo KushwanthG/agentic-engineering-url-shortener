@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
 public class ProbeRegistry {
 
     /** Post-release smoke probe per capability: create through the released capability, then resolve. */
-    private static final Map<String, String> SMOKE = Map.of("custom-alias", "CA-P6", "click-limit", "CL-P2");
+    private static final Map<String, String> SMOKE = Map.of("custom-alias", "CA-P6", "click-limit", "CL-P2", "default-expiry", "DE-P1");
 
     private final List<AcceptanceProbe> acceptance;
     private final List<AcceptanceProbe> all;
@@ -20,6 +20,7 @@ public class ProbeRegistry {
     public ProbeRegistry() {
         List<AcceptanceProbe> acceptanceProbes = new ArrayList<>(CustomAliasProbes.all());
         acceptanceProbes.addAll(ClickLimitProbes.all());
+        acceptanceProbes.addAll(DefaultExpiryProbes.all());
         this.acceptance = List.copyOf(acceptanceProbes);
         List<AcceptanceProbe> everything = new ArrayList<>(acceptance);
         everything.addAll(SecurityProbes.all());

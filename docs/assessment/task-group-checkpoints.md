@@ -244,3 +244,35 @@ security rules unchanged (deny-by-default; redirect route public by design); all
 - The brownfield gate order is visible in `git log`.
 - SCN-A still passes as the regression guard.
 - All tests are green.
+
+---
+
+## Checkpoint: Phase 8 — US6 ambiguous requirement, SCN-C (T091–T100; T096 deferred)
+
+| # | Item | Record |
+|---|------|--------|
+| 1 | Completed tasks | T091–T095, T097–T100. T096 (late ambiguity) is deferred by SD-1 |
+| 2 | Requirements addressed | FR-GOV-08, FR-GOV-02, FR-GOV-05, FR-REL-06 (clarification rounds), FR-RPL-01..05, FR-POL-01, FR-CAP-04, FR-ORC-15, SC-002 (SCN-C), SC-009 (17 SCN-C evidence items) |
+| 3 | ADRs followed | ADR-011 (content-addressed re-planning), ADR-008 (human gates, change control), ADR-018 (capability release with a decided parameter), ADR-017 (knowledge-driven agents) |
+| 4 | Files created or changed | `governance/{ClarificationService, ClarificationDerivation, ChangeRequestService}`, `planning/{ReplanningService, InputFingerprinter}`, `RunCoordinator` (reuse path, approval carry-over, clarification round limit; re-opening delegated), `RequirementAnalysisAgent` (resolved clarifications), `StageNode.redependOn`, `ArtifactStore` (supersede, produced-by), `GovernanceController` (clarification and change-request endpoints), DTOs, `WorkflowService.requirementDocument` made public; shortener `DefaultExpiryCapability`, `LinkCreationService`; probes `DefaultExpiryProbes`, `ProbeContext` (release parameters), `LinkSnapshot` (`expiresAt`); catalog acceptance templates; `res/scenarios/scn-c-ambiguous.json`; docs `scn-c-ambiguous.md`, `orchestration.md` (§5), `links.md` |
+| 5 | Tests written before implementation | T091, T093, T095, T097, T098 (red recorded) |
+| 6 | Expected initial failures | no clarification or change endpoints; no fingerprinter; no default expiry |
+| 7 | Validation commands executed | see `tdd-evidence.md` Phase 8; `mvnw -B -ntp verify` |
+| 8 | Actual outcomes | 483 tests green; SCN-A, SCN-B, SCN-C, and drills green |
+| 9 | Documentation updated | see row 4 |
+| 10 | Traceability updated | tests tagged FR-GOV-08, FR-RPL-*, FR-CAP-04, SCN-C; tasks marked |
+| 11 | Deviations from plan | (a) **Resolved clarifications.** A clarification counts as resolving when its question quotes the ambiguous phrase and the answer resolves it; only resolving answers are recorded in the requirement. This keeps within `requirement-document.schema.json`, which has no resolution field. (b) **Clarified requirement input.** The clarified requirement enters as a new `REQUIREMENT` artifact (stage `CLARIFICATION`), so ingestion is not repeated, as SCN-C requires. (c) **Approval carry-over.** A re-opened approval gate carries its approval over when its bound artifacts are unchanged; an interpretation of FR-GOV-05 for re-planning. (d) **Materiality rules** are criteria, constraints, or change type; wording is not material. (e) **Change gate limit.** After a rejected material change, the removed `CHANGE_APPROVAL` gate cannot be inserted again (`REMOVED` is terminal in the stage state model), so a further material change request on that run is refused with 409. (f) **SCN-C red stage.** The planned red stopped at `TESTING`, not `IMPLEMENTATION` (no schema or contract change to detect). (g) **Acceptance templates.** Acceptance criteria are derived from new catalog `acceptanceTemplates`. (h) **Knowledge version** hashes the catalog and lexicon files plus the policy-set version |
+| 12 | New risks | reuse depends on complete declared inputs (guardrail: agents only see declared inputs through `StageContext`) |
+| 13 | New assumptions | a new plan version is recorded on every clarification round, even when the stage structure is unchanged |
+| 14 | Remaining failures | none |
+| 15 | Commit boundary | Phase 8 |
+| 16 | Commit message | `feat(orchestration): add clarification, content-addressed re-planning, change control, and default expiry` |
+| 17 | Next task group | Phase 9 US7 — evidence and metrics (T101–T113 and T132, minus SD-1 deferrals) |
+| 18 | Human approval required | deviations (a)–(h), especially (c) and (e), for the candidate's review; the SCN-C answers are simulated, and a live walkthrough by the candidate is documented |
+
+**Pre-commit review**:
+- **Scope.** Clarification, re-planning, and change control are control-plane features. The shortener
+  change is limited to default expiry, which is capability-gated and applies at creation only.
+- **Contracts.** No contract or schema file changes. The new endpoints were already in `openapi.yaml`
+  and are validated by the contract harness in tests.
+- **Tests.** All scenarios green.

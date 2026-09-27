@@ -152,6 +152,11 @@ capabilities:
     regressionProbes: [R-P1, R-P2, R-P3]
     impactSeeds: [LinkCreationService, ShortLink]
     impactedRequirements: [FR-LNK-12, FR-RED-04]
+    # Acceptance criteria derived from clarification decisions (placeholders are release parameters).
+    acceptanceTemplates:
+      - "Given the capability is released with a default expiry of {defaultExpiryDays} days, when a link is created without an explicit expiry, then the link expires {defaultExpiryDays} days after creation."
+      - "Given the capability is released, when a link is created with an explicit expiry, then the explicit expiry is kept."
+      - "Given a link created before the capability was released, when it is resolved, then it keeps its original expiry."
     regressionRisks:
       - { id: RR-DE-1, description: "links created without an expiry start to expire", severity: HIGH, mitigation: "the default applies only to links created after release; stored links keep their expiry (R-P3)" }
       - { id: RR-DE-2, description: "clients relying on non-expiring links break", severity: MEDIUM, mitigation: "explicit expiresAt still wins; the default is a release parameter and can be withdrawn" }

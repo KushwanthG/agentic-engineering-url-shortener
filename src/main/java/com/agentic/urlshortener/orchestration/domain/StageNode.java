@@ -185,6 +185,11 @@ public class StageNode extends AssignedIdEntity {
         finishedAt = null;
     }
 
+    /** Replaces the stage's dependencies (re-planning: a new plan version adds or rewires stages). */
+    public void redependOn(List<StageType> newDependencies) {
+        dependsOn = newDependencies.stream().map(Enum::name).collect(Collectors.joining(","));
+    }
+
     public void recordFailure(FailureClass failureClass, String reason) {
         lastFailureClass = failureClass;
         lastFailureReason = Texts.truncate(reason, 1000);

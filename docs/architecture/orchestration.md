@@ -129,7 +129,28 @@ cycle, and `VALIDATION` waits for all of them.
 links, which are cleaned up by run (ADR-010). Their probe-and-cleanup sections therefore run under
 a per-run mutex (`SyntheticScope`). Dispatch and the rest of each stage remain concurrent.
 
+## 5. Re-planning, clarification, and change control (ADR-011)
+
+- **Plan versions.** Every re-plan records a plan version with its trigger (`CLARIFICATION`,
+  `CHANGE_REQUEST`, `CHANGE_DECISION`) and a diff: added and removed stages, dependency changes,
+  and invalidated stages.
+- **Re-opening.** `ReplanningService` re-opens the stage where changed input enters, and
+  everything downstream of it, as a new generation. Earlier results become stale, and the stages'
+  current artifacts are superseded.
+- **Reuse.** `InputFingerprinter` fingerprints an attempt from the requirement version, its
+  declared inputs, the agent id and version, and the knowledge version (catalog, lexicon, policy
+  set). A re-opened stage with an unchanged fingerprint is marked `REUSED`: its earlier artifacts
+  are recorded again, and the agent does not run.
+- **Approvals.** A re-opened gate keeps its approval only if the artifacts the approval is bound
+  to are unchanged. Otherwise the approval is invalidated, and a new decision is required.
+- **Clarification** (`ClarificationService`). The answers produce the next requirement version
+  and enter at requirement analysis, so ingestion is not repeated. A changed change type refines
+  the plan: for example, `CHANGE_TO_EXISTING` adds `IMPACT_ANALYSIS` and `REGRESSION_TESTING`.
+- **Change requests** (`ChangeRequestService`). A change is material when it alters the
+  acceptance criteria, the constraints, or the change type. A material change after an approval
+  inserts `CHANGE_APPROVAL` before every stage not yet started. Anything else is applied at once.
+- **Not implemented:** the late-ambiguity path (a mid-run stage requesting clarification, T096) is
+  deferred by scope decision SD-1. Ambiguity is handled at intake.
+
 **Reliability** (retry with backoff, timeouts, fallback, compensation, safe-stop, operator controls,
 recovery after restart, fault injection) is described in [reliability.md](reliability.md).
-**Re-planning** on change requests and clarifications arrives with Phases 7–8. The state machines
-already include those states, so later phases add behavior without changing the model.

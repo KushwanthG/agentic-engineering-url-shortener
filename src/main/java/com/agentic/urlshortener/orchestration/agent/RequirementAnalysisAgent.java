@@ -1,10 +1,13 @@
 package com.agentic.urlshortener.orchestration.agent;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Component;
@@ -74,8 +77,12 @@ public class RequirementAnalysisAgent implements StageAgent {
         List<CapabilityEntry> scenario = matches.stream().map(CapabilityCatalog.Match::capability).filter(c -> !c.baseline()).toList();
         List<String> capabilityIds = matches.stream().map(m -> m.capability().id()).toList();
 
+        Set<String> resolved = resolvedPhrases(requirement);
         List<Map<String, Object>> ambiguities = new ArrayList<>();
         for (AmbiguityLexicon.Finding finding : lexicon.detect(fullText)) {
+            if (resolved.contains(finding.text().toLowerCase(Locale.ROOT))) {
+                continue;
+            }
             ambiguities.add(ambiguity(ambiguities.size() + 1, finding.type(), finding.severity(), finding.blocking(), finding.text(),
                     affects(capabilityIds), finding.explanation()));
         }
@@ -136,6 +143,23 @@ public class RequirementAnalysisAgent implements StageAgent {
             drafts.add(ArtifactDraft.json("CLARIFICATION_REQUEST", CanonicalJson.write(clarificationRequest(context, ambiguities, scenario))));
         }
         return new StageResult.Succeeded(drafts, clarificationRequired ? rationale : "no clarification required");
+    }
+
+    private static final Pattern QUOTED = Pattern.compile("\"([^\"]+)\"");
+
+    /**
+     * Phrases a recorded clarification has resolved (FR-GOV-08): clarification questions quote the
+     * ambiguous phrase they ask about, and only resolving answers are recorded in the requirement.
+     */
+    static Set<String> resolvedPhrases(JsonNode requirement) {
+        Set<String> phrases = new HashSet<>();
+        for (JsonNode clarification : requirement.path("clarifications")) {
+            Matcher quoted = QUOTED.matcher(clarification.path("question").asString(""));
+            if (quoted.find()) {
+                phrases.add(quoted.group(1).toLowerCase(Locale.ROOT));
+            }
+        }
+        return phrases;
     }
 
     private Map<String, Object> clarificationRequest(StageContext context, List<Map<String, Object>> ambiguities,

@@ -78,7 +78,7 @@ public class InProcessApplicationPlaneAdapter implements ApplicationPlanePort {
     public Optional<LinkSnapshot> findLink(String code) {
         return links.findByCode(code).map(link -> new LinkSnapshot(link.getCode(), link.getTargetUrl(),
                 link.statusAt(clock.instant()).name(), link.getClickCount(), link.isCustomAlias(), link.isSynthetic(),
-                link.getMaxClicks()));
+                link.getMaxClicks(), link.getExpiresAt()));
     }
 
     @Override

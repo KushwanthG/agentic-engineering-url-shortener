@@ -24,7 +24,8 @@ public record CapabilityEntry(
         List<Threat> threats,
         List<DocAnchor> docAnchors,
         List<Task> tasks,
-        List<RegressionRisk> regressionRisks) {
+        List<RegressionRisk> regressionRisks,
+        List<String> acceptanceTemplates) {
 
     public CapabilityEntry {
         keywords = orEmpty(keywords);
@@ -39,6 +40,7 @@ public record CapabilityEntry(
         docAnchors = orEmpty(docAnchors);
         tasks = orEmpty(tasks);
         regressionRisks = orEmpty(regressionRisks);
+        acceptanceTemplates = orEmpty(acceptanceTemplates);
     }
 
     public record Component(String name, String path, String change, String responsibility) {

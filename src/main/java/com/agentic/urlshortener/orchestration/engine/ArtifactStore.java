@@ -72,6 +72,27 @@ public class ArtifactStore {
         return stored;
     }
 
+    /** Marks the current artifacts produced by {@code stage} as superseded (the stage is re-opened by re-planning). */
+    public List<String> supersedeStage(UUID runId, StageType stage) {
+        List<String> superseded = new ArrayList<>();
+        for (Artifact artifact : artifacts.findByRunIdAndSupersededFalseOrderByCreatedAtAsc(runId)) {
+            if (artifact.getStageKey() == stage) {
+                artifact.supersede();
+                superseded.add(artifact.getArtifactType() + " v" + artifact.getVersion());
+            }
+        }
+        if (!superseded.isEmpty()) {
+            audit.system(runId, "ARTIFACTS_SUPERSEDED", stage.name(), "OK", "stage re-opened", Map.of("artifacts", superseded));
+        }
+        return superseded;
+    }
+
+    /** The artifacts one generation of a stage produced (for reuse when its inputs are unchanged). */
+    public List<Artifact> producedBy(UUID runId, StageType stage, int generation) {
+        return artifacts.findByRunIdOrderByCreatedAtAsc(runId).stream()
+                .filter(a -> a.getStageKey() == stage && a.getGeneration() == generation).toList();
+    }
+
     public static ArtifactInput view(Artifact artifact) {
         return new ArtifactInput(artifact.getId(), artifact.getArtifactType(), artifact.getVersion(), artifact.getFingerprint(),
                 artifact.getMediaType(), artifact.getContent());

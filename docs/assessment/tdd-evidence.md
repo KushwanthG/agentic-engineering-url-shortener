@@ -211,3 +211,35 @@ Times are UTC on 2026-09-27.
    expected outcome. Fixed with a distinct count, plus a null guard.
 
 **Final green**: 03:01 `mvnw -B -ntp verify` (online) → 462 tests, 0 failures, 0 errors, BUILD SUCCESS.
+
+## Phase 8 — US6 ambiguous requirement, SCN-C (T091–T100; T096 deferred by SD-1)
+
+Times are UTC on 2026-09-27.
+
+| Tasks | Test(s) | Red run (command → observed failure) | Green run (command → result) |
+|-------|---------|--------------------------------------|------------------------------|
+| T091–T092 | `ClarificationFlowTest` (4) | 03:10 → 4 tests, 3 failures: `Status expected:<200> but was:<404>` (no clarification endpoint), `expected:<400> but was:<404>`. The suspension test passed, since the Phase 4 engine already holds downstream stages at the gate | 03:15 (with `ApprovalBindingTest`, `RequirementAnalysisAgentTest`) → 12/12 |
+| T093–T094 | `InputFingerprinterTest` (3), `ReplanningServiceTest` (4) | 03:18 → compile error, `InputFingerprinter` missing | 03:19 → 18/19: a test defect (see note 1); 03:21 → 4/4 |
+| T095 | `ChangeRequestFlowTest` (5) | 03:23 → 5 tests, 4 failures, 1 error: `Status expected:<202> but was:<404>` (no endpoints) | 03:26 → 12/13 (see note 2); 03:31 → 5/5 |
+| T098 | `ScenarioCAmbiguousE2ETest` (1) | 03:32 → **behavioral red**: clarification, re-planning, and architecture approval worked, then "SAFE_STOPPED — stage TESTING failed: no acceptance probes exist for capability default-expiry" (see note 3) | 03:41 → 1/1 (after T097 and note 4) |
+| T097 | `DefaultExpiryTest` (4) | 03:33 → 4 tests, 2 failures: no default expiry applied | 03:34 (with the creation, idempotency, and redirect tests) → 22/22 |
+
+**Notes**
+
+1. **Test defect:** `ReplanningServiceTest` stored the changed requirement *before* re-planning.
+   Re-planning supersedes the artifacts of re-opened stages, which included the stage the test had
+   attributed the artifact to, so the run lost its requirement. The services store after
+   re-planning; the test now does the same.
+2. **Test defect:** the scripted ingestion in `ChangeRequestFlowTest` emitted a placeholder instead
+   of the submitted requirement, so a wording-only change looked like a content change and the
+   approval was correctly invalidated. Diagnosed from the decision record ("bound artifact DESIGN
+   changed"); the scripted ingestion now passes the real requirement through.
+3. **Planned red, different stage:** T098 expected the stop at `IMPLEMENTATION`. Default expiry
+   changes no schema and no contract, so the delivery check at `IMPLEMENTATION` passes. The
+   undelivered behavior was refused at `TESTING` instead.
+4. **Finding after the code existed** (03:36, diagnosed at 03:39 with a temporary debug print that
+   was then removed): the run blocked at `COMPLIANCE_EVALUATION` because DOC-001 failed —
+   `docs/api/links.md` did not document default expiry (catalog anchor "default expiry"). The
+   guide was updated as part of T097, and the run completed `READY`.
+
+**Final green**: 03:42 `mvnw -B -ntp verify` (online) → 483 tests, 0 failures, 0 errors, BUILD SUCCESS.

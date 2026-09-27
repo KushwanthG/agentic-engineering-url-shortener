@@ -62,7 +62,7 @@ public class ReleaseAgent implements StageAgent {
         ProbeOutcome verification = SyntheticScope.exclusive(context.runId(), () -> {
             try {
                 return probes.smoke(capability)
-                        .map(probe -> probe.run(new ProbeContext(context.runId(), context.port())))
+                        .map(probe -> probe.run(new ProbeContext(context.runId(), context.port(), parameters)))
                         .orElse(ProbeOutcome.fail("no smoke probe is registered for " + capability));
             } finally {
                 context.port().deleteSyntheticLinks(context.runId());

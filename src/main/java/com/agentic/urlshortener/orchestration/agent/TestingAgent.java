@@ -55,7 +55,8 @@ public class TestingAgent implements StageAgent {
             return new StageResult.Failed(FailureClass.PERMANENT, "no acceptance probes exist for capability " + capability);
         }
         Map<String, String> criteria = AgentInputs.criteria(context.inputJson("NORMALIZED_REQUIREMENT"));
-        ProbeContext probeContext = new ProbeContext(context.runId(), context.port());
+        ProbeContext probeContext = new ProbeContext(context.runId(), context.port(),
+                ProbeRuns.releaseParameters(design));
         int[] removed = new int[1];
         List<ProbeRuns.Result> results = SyntheticScope.exclusive(context.runId(), () -> {
             try {

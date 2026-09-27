@@ -148,7 +148,8 @@ public class WorkflowService {
     }
 
     /** The submitted requirement as a {@code requirement-document} (acceptance criteria numbered AC-1..n). */
-    static Map<String, Object> requirementDocument(RequirementSubmission submission) {
+    /** The requirement document (schema {@code requirement-document}) of a submission. */
+    public static Map<String, Object> requirementDocument(RequirementSubmission submission) {
         List<Map<String, Object>> criteria = new ArrayList<>();
         int index = 1;
         for (String text : submission.acceptanceCriteria()) {

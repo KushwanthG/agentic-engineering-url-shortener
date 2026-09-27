@@ -7,13 +7,11 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
-import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -24,7 +22,6 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.agentic.urlshortener.common.util.CanonicalJson;
-import com.agentic.urlshortener.common.util.Fingerprints;
 import com.agentic.urlshortener.orchestration.agent.AgentRegistry;
 import com.agentic.urlshortener.orchestration.agent.ArtifactDraft;
 import com.agentic.urlshortener.orchestration.agent.PermissionAudit;
@@ -56,6 +53,8 @@ import com.agentic.urlshortener.orchestration.reliability.FailureEventRecorder;
 import com.agentic.urlshortener.orchestration.reliability.FaultInjector;
 import com.agentic.urlshortener.orchestration.reliability.RetryPolicy;
 import com.agentic.urlshortener.orchestration.reliability.StagePolicyProperties;
+import com.agentic.urlshortener.orchestration.planning.InputFingerprinter;
+import com.agentic.urlshortener.orchestration.planning.ReplanningService;
 import com.agentic.urlshortener.orchestration.policy.PolicyEvaluationRecorder;
 import com.agentic.urlshortener.orchestration.repository.DecisionRepository;
 import com.agentic.urlshortener.orchestration.repository.RequirementVersionRepository;
@@ -98,6 +97,8 @@ public class RunCoordinator {
     private final TaskScheduler scheduler;
     private final CompensationCoordinator compensations;
     private final FaultInjector faults;
+    private final ReplanningService replanning;
+    private final InputFingerprinter fingerprinter;
     private final Set<UUID> stopping = ConcurrentHashMap.newKeySet();
 
     public RunCoordinator(WorkflowRunRepository runs, StageNodeRepository nodes, StageAttemptRepository attempts,
@@ -106,7 +107,10 @@ public class RunCoordinator {
             PlatformTransactionManager transactionManager, Clock clock, OrchestrationProperties properties,
             ObjectProvider<ApplicationPlanePort> port, PermissionAudit permissionAudit, PolicyEvaluationRecorder policyRecorder,
             DecisionRepository decisions, StagePolicyProperties stagePolicies, FailureEventRecorder failureEvents,
-            TaskScheduler scheduler, CompensationCoordinator compensations, FaultInjector faults) {
+            TaskScheduler scheduler, CompensationCoordinator compensations, FaultInjector faults, ReplanningService replanning,
+            InputFingerprinter fingerprinter) {
+        this.fingerprinter = fingerprinter;
+        this.replanning = replanning;
         this.faults = faults;
         this.compensations = compensations;
         this.stagePolicies = stagePolicies;
@@ -314,7 +318,7 @@ public class RunCoordinator {
                 approval.get().invalidate(change.get());
                 audit.system(runId, "DECISION_INVALIDATED", gate.getStageKey().name(), "INVALIDATED", change.get(),
                         Map.of("decisionId", approval.get().getId().toString()));
-                reopenWithDependents(runId, gate, plan, "approval invalidated: " + change.get());
+                replanning.reopen(runId, gate, plan, "approval invalidated: " + change.get(), true);
             }
         }
     }
@@ -330,35 +334,6 @@ public class RunCoordinator {
             }
         });
         return changes.isEmpty() ? Optional.empty() : Optional.of(String.join("; ", changes));
-    }
-
-    /** Re-opens {@code origin} and all stages that transitively depend on it; their valid decisions are invalidated. */
-    private void reopenWithDependents(UUID runId, StageNode origin, List<StageNode> plan, String reason) {
-        Set<StageType> affected = EnumSet.of(origin.getStageKey());
-        boolean grew;
-        do {
-            grew = false;
-            for (StageNode node : plan) {
-                if (!affected.contains(node.getStageKey()) && node.getDependsOn().stream().anyMatch(affected::contains)) {
-                    affected.add(node.getStageKey());
-                    grew = true;
-                }
-            }
-        } while (grew);
-        for (StageNode node : plan) {
-            if (!affected.contains(node.getStageKey()) || node.getStatus() == StageStatus.PENDING) {
-                continue;
-            }
-            StageStatus from = node.getStatus();
-            if (node != origin && node.getStageType().isGate()) {
-                decisions.findByRunIdAndStageKeyAndValidTrueOrderByCreatedAtDesc(runId, node.getStageKey())
-                        .forEach(d -> d.invalidate("upstream approval " + origin.getStageKey() + " was invalidated"));
-            }
-            failureEvents.generationInvalidated(runId, node.getStageKey(), node.getGeneration(), reason);
-            node.reopen();
-            audit.transition(runId, node.getStageKey().name(), from, StageStatus.PENDING,
-                    node == origin ? reason : "re-opened: upstream " + origin.getStageKey() + " re-opened");
-        }
     }
 
     private void resolvePending(UUID runId, StageNode node, Map<String, Artifact> current, Instant now) {
@@ -380,10 +355,78 @@ public class RunCoordinator {
     }
 
     /** Opens a gate, or starts an attempt and returns its dispatch. */
+    /**
+     * Reuse path (FR-RPL-05): a re-opened stage whose input fingerprint equals that of an earlier
+     * successful attempt does not run its agent again; the earlier artifacts are recorded again as the
+     * new generation's output, with identical content and fingerprints, so unchanged downstream stages
+     * can be reused too.
+     */
+    private boolean reuse(WorkflowRun run, StageNode node, String agentId, String fingerprint, Map<String, ArtifactInput> inputs,
+            long cycle, Instant now) {
+        UUID runId = run.getId();
+        StageType type = node.getStageKey();
+        Optional<StageAttempt> earlier = attempts.findByRunIdOrderByStartedAtAsc(runId).stream()
+                .filter(a -> a.getStageKey() == type && a.getGeneration() < node.getGeneration()
+                        && a.getOutcome() == AttemptOutcome.SUCCEEDED && fingerprint.equals(a.getInputFingerprint()))
+                .reduce((first, second) -> second);
+        if (earlier.isEmpty()) {
+            return false;
+        }
+        List<ArtifactDraft> drafts = artifacts.producedBy(runId, type, earlier.get().getGeneration()).stream()
+                .filter(a -> a.getAttemptNo() == earlier.get().getAttemptNo())
+                .map(a -> new ArtifactDraft(a.getArtifactType(), a.getMediaType(), a.getContent())).toList();
+        if (criteria.exit(type, drafts).isPresent()) {
+            return false;
+        }
+        int attemptNo = node.getAttempts() + 1;
+        StageAttempt reused = attempts.save(StageAttempt.start(runId, type, node.getGeneration(), attemptNo, agentId, false, null, cycle,
+                now, fingerprint));
+        reused.finish(AttemptOutcome.REUSED, null, "inputs unchanged since generation " + earlier.get().getGeneration(), now);
+        artifacts.store(runId, type, node.getGeneration(), attemptNo, agentId + " (reused)", drafts, inputs, now);
+        drafts.stream().filter(d -> d.type().equals("COMPLIANCE_REPORT")).findFirst().ifPresent(report ->
+                policyRecorder.record(runId, type, node.getGeneration(), report.content(), agentId, now));
+        node.markReused(now);
+        audit.system(runId, "ATTEMPT_REUSED", type.name(), "REUSED", "input fingerprint unchanged since generation "
+                + earlier.get().getGeneration(), Map.of("generation", node.getGeneration(), "fingerprint", fingerprint));
+        audit.transition(runId, type.name(), StageStatus.READY, StageStatus.SUCCEEDED, "reused: inputs unchanged");
+        afterSuccess(run, type);
+        return true;
+    }
+
+    /**
+     * A re-opened gate keeps its approval when every artifact the approval is bound to is unchanged
+     * (FR-GOV-05); a stale approval is invalidated with the reason and the gate waits for a new decision.
+     */
+    private boolean carryOverApproval(UUID runId, StageNode gate, Instant now) {
+        if (gate.getStageType().gateAwaiting() != AwaitingType.APPROVAL) {
+            return false;
+        }
+        Optional<Decision> approval = decisions.findByRunIdAndStageKeyAndValidTrueOrderByCreatedAtDesc(runId, gate.getStageKey())
+                .stream().filter(d -> "APPROVED".equals(d.getOutcome()) && d.getBoundFingerprints() != null).findFirst();
+        if (approval.isEmpty()) {
+            return false;
+        }
+        Optional<String> change = boundChange(approval.get(), artifacts.current(runId));
+        if (change.isPresent()) {
+            approval.get().invalidate(change.get());
+            audit.system(runId, "DECISION_INVALIDATED", gate.getStageKey().name(), "INVALIDATED", change.get(),
+                    Map.of("decisionId", approval.get().getId().toString()));
+            return false;
+        }
+        gate.succeedGate(approval.get(), now);
+        audit.system(runId, "APPROVAL_CARRIED_OVER", gate.getStageKey().name(), "OK", "bound artifacts unchanged",
+                Map.of("decisionId", approval.get().getId().toString()));
+        audit.transition(runId, gate.getStageKey().name(), StageStatus.READY, StageStatus.SUCCEEDED, "approval carried over");
+        return true;
+    }
+
     private Dispatch start(WorkflowRun run, StageNode node, RequirementVersion requirement, long cycle, Instant now) {
         UUID runId = run.getId();
         StageType type = node.getStageKey();
         if (type.isGate()) {
+            if (carryOverApproval(runId, node, now)) {
+                return null;
+            }
             Instant deadline = now.plus(gateDeadline(run));
             node.awaitDecision(type.gateAwaiting(), deadline);
             audit.transition(runId, type.name(), StageStatus.READY, StageStatus.AWAITING_DECISION,
@@ -394,7 +437,11 @@ public class RunCoordinator {
         Optional<StageAgent> selected = fallback ? registry.fallback(type) : registry.primary(type);
         Map<String, ArtifactInput> inputs = artifacts.inputsFor(runId, type);
         String agentId = selected.map(StageAgent::agentId).orElse("none");
-        String fingerprint = inputFingerprint(requirement, inputs, agentId);
+        String fingerprint = fingerprinter.fingerprint(requirement.getFingerprint(), inputs, agentId);
+        if (!fallback && node.getStatus() == StageStatus.READY && node.getAttempts() == 0 && node.getGeneration() > 1
+                && reuse(run, node, agentId, fingerprint, inputs, cycle, now)) {
+            return null;
+        }
         StageStatus from = node.getStatus();
         boolean recovering = node.getAttempts() > 0;
         Optional<FaultPlan.Fault> fault = run.getFaultPlan() == null ? Optional.empty()
@@ -551,6 +598,14 @@ public class RunCoordinator {
 
     /** Derives the run status from its plan; returns whether the run became terminal. */
     private boolean deriveRunStatus(WorkflowRun run, List<StageNode> plan, Instant now) {
+        boolean clarificationAgain = plan.stream().anyMatch(n -> n.getStageKey() == StageType.CLARIFICATION
+                && n.getStatus() == StageStatus.AWAITING_DECISION);
+        if (clarificationAgain && run.getClarificationRounds() >= properties.maxClarificationRounds()) {
+            safeStop(run.getId(), "CLARIFICATION_ROUNDS_EXCEEDED", "clarification still required after " + run.getClarificationRounds()
+                    + " rounds (maximum " + properties.maxClarificationRounds() + "); the requirement stays ambiguous",
+                    ActorType.SYSTEM, RunAudit.SYSTEM, now);
+            return true;
+        }
         Optional<StageNode> failed = plan.stream().filter(n -> n.getStatus() == StageStatus.FAILED).findFirst();
         if (failed.isPresent()) {
             safeStop(run.getId(), "STAGE_FAILED", "stage " + failed.get().getStageKey() + " failed: "
@@ -667,17 +722,6 @@ public class RunCoordinator {
 
     private static boolean dependenciesSatisfied(StageNode node, Map<StageType, StageNode> byKey) {
         return node.getDependsOn().stream().allMatch(d -> byKey.containsKey(d) && byKey.get(d).getStatus().satisfiesDependency());
-    }
-
-    /** Fingerprint of everything an attempt depends on (requirement, inputs, agent version) for reuse decisions. */
-    static String inputFingerprint(RequirementVersion requirement, Map<String, ArtifactInput> inputs, String agentId) {
-        Map<String, Object> basis = new TreeMap<>();
-        basis.put("requirement", requirement.getFingerprint());
-        basis.put("agent", agentId);
-        Map<String, String> inputFingerprints = new TreeMap<>();
-        inputs.forEach((type, input) -> inputFingerprints.put(type, input.fingerprint()));
-        basis.put("inputs", inputFingerprints);
-        return Fingerprints.ofValue(basis);
     }
 
     private ApplicationPlanePort scopedPort(UUID runId, StageType type, StageAgent agent) {

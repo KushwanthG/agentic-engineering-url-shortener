@@ -1,5 +1,6 @@
 package com.agentic.urlshortener.orchestration.agent.probes;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -20,10 +21,21 @@ public final class ProbeContext {
     private final UUID runId;
     private final ApplicationPlanePort port;
     private final AtomicInteger created = new AtomicInteger();
+    private final Map<String, Object> parameters;
 
     public ProbeContext(UUID runId, ApplicationPlanePort port) {
+        this(runId, port, Map.of());
+    }
+
+    /** A context whose probes can read the decided release parameters (for example {@code defaultExpiryDays}). */
+    public ProbeContext(UUID runId, ApplicationPlanePort port, Map<String, Object> parameters) {
         this.runId = runId;
         this.port = port;
+        this.parameters = Map.copyOf(parameters);
+    }
+
+    public Optional<Object> parameter(String name) {
+        return Optional.ofNullable(parameters.get(name));
     }
 
     public ProbeResponse create(String url, String alias) {

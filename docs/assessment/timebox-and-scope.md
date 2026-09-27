@@ -125,3 +125,15 @@ invariants) — they are validation, security, or critical-path evidence.
   ambiguity) is not triggered for scope reasons. T096 stays deferred under SD-1 as recorded.
   T074 (autonomy budget) stays deferred; policy AUT-001 reports budget usage as an advisory.
   The candidate instructed to implement Phases 5–10 for submission. Next: Phase 7 (US5, SCN-B).
+
+### CP3 (after US6, T100) — 2026-09-27
+
+- **SCN-A, SCN-B, SCN-C green?** Yes:
+  - All three scenarios complete end to end over HTTP with the real agents.
+  - The drills are green.
+  - The full suite (483 tests) is green.
+- **Elapsed time vs. plan**: not measured in hours (no time tracking was kept).
+- **Decision (CP3 rule)**: must-have scope is complete. T096 (late-ambiguity mid-run path) stays
+  deferred under SD-1; ambiguity is handled at intake (SCN-C) and the limitation is documented in
+  `docs/architecture/orchestration.md`. Next: Phase 9 (evidence and metrics), then Phase 10
+  (submission polish), both limited to the non-deferred tasks.

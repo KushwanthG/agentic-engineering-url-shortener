@@ -82,6 +82,16 @@ How a limit is enforced:
   exceed the limit.
 - Withdrawing the capability stops new limits only. Stored limits stay enforced.
 
+### Default expiry (capability `default-expiry`)
+
+When the `default-expiry` capability is released, a link created **without** `expiresAt` expires a
+number of days after creation. The number of days is a release parameter (`defaultExpiryDays`)
+decided by a human during clarification (scenario SCN-C; the reference decision is 30 days).
+
+- An explicit `expiresAt` is always kept.
+- Existing links are never changed: the default applies at creation only.
+- Withdrawing the capability stops new defaults. Expiries already assigned remain.
+
 ### URL safety rules (no DNS resolution)
 
 Rejected with `400` and a specific code:

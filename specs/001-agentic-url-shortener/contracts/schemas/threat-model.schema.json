@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agentic-sdlc:schema:threat-model:1.0.0",
+  "title": "ThreatModel",
+  "description": "Output of THREAT_ASSESSMENT: STRIDE-classified threats with mitigations and verification probes.",
+  "type": "object",
+  "required": ["capabilities", "threats"],
+  "additionalProperties": false,
+  "properties": {
+    "capabilities": { "type": "array", "items": { "type": "string" } },
+    "threats": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "category", "description", "severity", "mitigation", "verifiedBy"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "category": { "enum": ["SPOOFING", "TAMPERING", "REPUDIATION", "INFORMATION_DISCLOSURE", "DENIAL_OF_SERVICE", "ELEVATION_OF_PRIVILEGE"] },
+          "description": { "type": "string" },
+          "severity": { "enum": ["HIGH", "MEDIUM", "LOW"] },
+          "mitigation": { "type": "string" },
+          "verifiedBy": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

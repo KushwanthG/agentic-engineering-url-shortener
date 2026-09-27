@@ -1,0 +1,3 @@
+# Other
+
+Nothing about redirects.

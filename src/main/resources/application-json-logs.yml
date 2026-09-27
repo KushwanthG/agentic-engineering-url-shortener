@@ -1,0 +1,5 @@
+# Structured (ECS JSON) console logs; MDC keys correlationId, runId, stage, attempt are included.
+logging:
+  structured:
+    format:
+      console: ecs

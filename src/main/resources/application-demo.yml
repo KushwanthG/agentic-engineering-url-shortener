@@ -1,0 +1,29 @@
+# DEMO PROFILE — NON-PRODUCTION DEMONSTRATION CREDENTIALS.
+# Raw tokens are published in quickstart.md for reviewers; only their SHA-256 hashes are stored here.
+# Fault injection is enabled so the reliability drills (RDR-01..RDR-07) can be run by hand.
+app:
+  security:
+    principals:
+      - id: demo-consumer
+        display-name: Demo API consumer (non-production)
+        token-sha256: 589536a607014d539636e078032b0bd279d4f741b4a2f4c02a0215c59393e6d5
+        roles: [API_CONSUMER]
+      - id: alice
+        display-name: Alice, requester (non-production)
+        token-sha256: e613ec83db425fcd80f9bc0ea7c012be6d632cb8e85437f1bb00f6eb235a650a
+        roles: [REQUESTER]
+      - id: bob
+        display-name: Bob, approver (non-production)
+        token-sha256: 13398dbc5ccc9670af6606f261884ed54db3b3a773eae74d7e140a6b6e4abc3c
+        roles: [APPROVER]
+      - id: carol
+        display-name: Carol, release owner (non-production)
+        token-sha256: 115e2fb2810b512117077d57dd29a6799f40a3f7ca7dacdd201f91d36d4af2de
+        roles: [RELEASE_OWNER]
+      - id: rita
+        display-name: Rita, auditor / assessment reviewer (non-production)
+        token-sha256: d0ad8bb68835a23576c95ef7ddd7c1ffaec451daaf8de46902e7e82b1786886c
+        roles: [AUDITOR]
+  orchestration:
+    fault-injection:
+      enabled: true

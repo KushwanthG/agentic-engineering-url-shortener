@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agentic-sdlc:schema:compliance-report:1.0.0",
+  "title": "ComplianceReport",
+  "description": "Output of COMPLIANCE_EVALUATION: every applicable policy outcome for the pinned policy-set version (FR-POL-01..06).",
+  "type": "object",
+  "required": ["policySetVersion", "evaluations", "blocked", "blockingPolicies"],
+  "additionalProperties": false,
+  "properties": {
+    "policySetVersion": { "type": "string" },
+    "evaluations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["policyId", "severity", "outcome", "evidence", "simulated"],
+        "additionalProperties": false,
+        "properties": {
+          "policyId": { "type": "string" },
+          "severity": { "enum": ["MANDATORY", "ADVISORY"] },
+          "outcome": { "enum": ["PASS", "FAIL", "EXCEPTION_REQUESTED", "NOT_APPLICABLE"] },
+          "evidence": { "type": "string" },
+          "exceptionId": { "type": ["string", "null"] },
+          "simulated": { "type": "boolean" }
+        }
+      }
+    },
+    "blocked": { "type": "boolean" },
+    "blockingPolicies": { "type": "array", "items": { "type": "string" } }
+  }
+}

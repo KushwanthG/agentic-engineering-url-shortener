@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agentic-sdlc:schema:change-set:1.0.0",
+  "title": "ChangeSet",
+  "description": "Output of IMPLEMENTATION: planned code units per task and verification that the capability is delivered in the running system (FR-ORC-15).",
+  "type": "object",
+  "required": ["capability", "delivered", "checks", "units"],
+  "additionalProperties": false,
+  "properties": {
+    "capability": { "type": "string" },
+    "delivered": { "type": "boolean" },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["check", "result", "evidence"],
+        "additionalProperties": false,
+        "properties": {
+          "check": { "enum": ["PROVIDER_REGISTERED", "MIGRATION_APPLIED", "CONTRACT_DECLARES_FIELDS", "RELEASE_STATE_KNOWN"] },
+          "result": { "enum": ["PASS", "FAIL", "NOT_APPLICABLE"] },
+          "evidence": { "type": "string" }
+        }
+      }
+    },
+    "units": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["taskId", "path", "change"],
+        "additionalProperties": false,
+        "properties": {
+          "taskId": { "type": "string" },
+          "path": { "type": "string" },
+          "change": { "type": "string" }
+        }
+      }
+    }
+  }
+}

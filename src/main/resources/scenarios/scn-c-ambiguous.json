@@ -1,0 +1,8 @@
+{
+  "ref": "AMB-001",
+  "title": "Better link expiry.",
+  "type": "UNSPECIFIED",
+  "narrative": "Links should expire after a while so old links don't pile up, but premium users' links should never expire. Also make the analytics better.",
+  "acceptanceCriteria": [],
+  "constraints": []
+}

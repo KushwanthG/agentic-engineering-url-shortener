@@ -1,0 +1,89 @@
+# Policy set evaluated by COMPLIANCE_EVALUATION (plan.md §9, ADR-019). The version is pinned on each run
+# when it is created; a changed policy set gets a new version. Rules are implemented as Java beans
+# (orchestration/policy/rules) keyed by the policy id.
+version: 1.0.0
+policies:
+  - id: SEC-001
+    title: URL validation probes pass
+    domain: SECURITY
+    severity: MANDATORY
+    appliesWhen: always
+    description: Every URL-validation probe of the security verification report passed.
+  - id: SEC-002
+    title: No secrets in run artifacts
+    domain: SECURITY
+    severity: MANDATORY
+    appliesWhen: always
+    description: No run artifact contains a private key, bearer token, cloud access key, or password value.
+  - id: SEC-003
+    title: High threats verified
+    domain: SECURITY
+    severity: MANDATORY
+    appliesWhen: threats present
+    description: Every HIGH threat of the threat model is verified by a passing probe.
+  - id: PRV-001
+    title: No personal data columns
+    domain: PRIVACY
+    severity: MANDATORY
+    appliesWhen: schema changes
+    description: No schema change adds a personal-data column (IP address, e-mail, user agent, name).
+  - id: AUD-001
+    title: Audit chain intact
+    domain: COMPLIANCE
+    severity: MANDATORY
+    appliesWhen: always
+    description: The run's audit chain verifies.
+  - id: AUD-002
+    title: Audit retention
+    domain: COMPLIANCE
+    severity: MANDATORY
+    appliesWhen: always
+    description: Configured audit retention is at least 365 days.
+  - id: LIC-001
+    title: Approved dependency licenses
+    domain: LICENSING
+    severity: MANDATORY
+    appliesWhen: always
+    description: Every SBOM component license is on the allow-list; a missing SBOM fails.
+  - id: TST-001
+    title: Acceptance criteria verified
+    domain: TESTING
+    severity: MANDATORY
+    appliesWhen: always
+    description: Every acceptance criterion is verified by at least one passing probe.
+  - id: TST-002
+    title: Regression suite passed
+    domain: TESTING
+    severity: MANDATORY
+    appliesWhen: change to existing behavior
+    description: The regression suite passed.
+  - id: DOC-001
+    title: Documentation updated
+    domain: DOCUMENTATION
+    severity: MANDATORY
+    appliesWhen: API or behavior change
+    description: Generated documentation is present and the repository documentation mentions the capability.
+  - id: CHG-001
+    title: Architecture approval bound to the design
+    domain: CHANGE_CONTROL
+    severity: MANDATORY
+    appliesWhen: material change
+    description: A valid architecture approval is bound to the current design fingerprint.
+  - id: CHG-002
+    title: Impact analysis complete
+    domain: CHANGE_CONTROL
+    severity: MANDATORY
+    appliesWhen: change to existing behavior
+    description: An impact analysis is present and not degraded.
+  - id: REL-001
+    title: Release and rollback plan
+    domain: RELEASE
+    severity: MANDATORY
+    appliesWhen: always
+    description: The design contains a release plan and a rollback plan.
+  - id: AUT-001
+    title: Autonomy budget headroom
+    domain: COMPLIANCE
+    severity: ADVISORY
+    appliesWhen: always
+    description: Autonomy budget usage is below 80 percent.

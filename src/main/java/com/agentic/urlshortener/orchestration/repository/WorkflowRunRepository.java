@@ -1,0 +1,17 @@
+package com.agentic.urlshortener.orchestration.repository;
+
+import java.util.Collection;
+import java.util.List;
+import java.util.UUID;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import com.agentic.urlshortener.orchestration.domain.RunStatus;
+import com.agentic.urlshortener.orchestration.domain.WorkflowRun;
+
+public interface WorkflowRunRepository extends JpaRepository<WorkflowRun, UUID> {
+
+    List<WorkflowRun> findAllByOrderByCreatedAtDesc();
+
+    List<WorkflowRun> findByStatusIn(Collection<RunStatus> statuses);
+}

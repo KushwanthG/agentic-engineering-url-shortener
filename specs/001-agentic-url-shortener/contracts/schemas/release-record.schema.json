@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agentic-sdlc:schema:release-record:1.0.0",
+  "title": "ReleaseRecord",
+  "description": "Output of RELEASE: the capability state change, post-release verification, and rollback if verification failed (FR-RDY-03).",
+  "type": "object",
+  "required": ["capability", "previouslyReleased", "released", "parameters", "verification", "rolledBack", "mechanism"],
+  "additionalProperties": false,
+  "properties": {
+    "capability": { "type": "string" },
+    "previouslyReleased": { "type": "boolean" },
+    "released": { "type": "boolean" },
+    "parameters": { "type": "object" },
+    "verification": {
+      "type": "object",
+      "required": ["passed", "evidence"],
+      "additionalProperties": false,
+      "properties": {
+        "passed": { "type": "boolean" },
+        "evidence": { "type": "string" }
+      }
+    },
+    "rolledBack": { "type": "boolean" },
+    "mechanism": { "enum": ["NONE", "ROLLBACK_OF_RELEASE_STATE"] }
+  }
+}

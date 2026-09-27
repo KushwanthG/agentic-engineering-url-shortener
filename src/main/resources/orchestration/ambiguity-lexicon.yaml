@@ -1,0 +1,74 @@
+# Ambiguity lexicon (plan.md §3, ADR-017): text patterns that make a requirement unclear, and the
+# question templates the clarification gate presents (FR-GOV-08). Patterns are case-insensitive
+# regular expressions. Structural checks (missing acceptance criteria, unspecified type, unknown
+# capability) are made by the requirement-analysis agent and use the templates below.
+version: 1.0.0
+vagueTerms:
+  - { pattern: "after a while", severity: HIGH, explanation: "a duration is required but not quantified" }
+  - { pattern: "\\bsoon\\b", severity: HIGH, explanation: "a time bound is required but not quantified" }
+  - { pattern: "\\bsome time\\b", severity: HIGH, explanation: "a duration is required but not quantified" }
+  - { pattern: "\\bas fast as possible\\b", severity: MEDIUM, explanation: "a performance target is not quantified" }
+  - { pattern: "\\buser[- ]friendly\\b", severity: MEDIUM, explanation: "a usability criterion is not measurable" }
+  - { pattern: "\\betc\\.?", severity: MEDIUM, explanation: "the list of items is open-ended" }
+undefinedConcepts:
+  - { pattern: "\\bpremium (users?|customers?|accounts?)\\b", severity: HIGH, explanation: "the system has no user tiers; only API consumers exist" }
+  - { pattern: "\\bvip\\b", severity: HIGH, explanation: "the system has no user tiers; only API consumers exist" }
+  - { pattern: "\\b(gold|silver|paid) (members?|users?|tiers?)\\b", severity: HIGH, explanation: "the system has no user tiers; only API consumers exist" }
+  - { pattern: "\\bsubscribers?\\b", severity: HIGH, explanation: "the system has no subscription concept" }
+conflicts:
+  - { first: "(?<!never )\\bexpire\\b", second: "\\bnever expire\\b", severity: HIGH, explanation: "one rule makes links expire while another makes some links never expire" }
+  - { first: "(?<!not )\\bpublic\\b", second: "\\bnot public\\b", severity: HIGH, explanation: "visibility rules contradict each other" }
+unboundedScope:
+  - { pattern: "\\bmake (the )?[a-z]+ (better|nicer|faster)\\b", severity: MEDIUM, explanation: "an open-ended improvement with no measurable outcome" }
+  - { pattern: "\\bimprove (everything|all|the whole)\\b", severity: MEDIUM, explanation: "an open-ended improvement with no measurable outcome" }
+questions:
+  VAGUE_TERM:
+    question: "The requirement says \"{text}\". Which concrete value should apply?"
+    allowFreeText: true
+    options:
+      - { optionId: A, label: "7 days", impact: "short-lived links; more links expire early" }
+      - { optionId: B, label: "30 days", impact: "links expire after one month; old links stop piling up" }
+      - { optionId: C, label: "90 days", impact: "longer-lived links; slower cleanup" }
+      - { optionId: D, label: "No default (keep links until an explicit expiry)", impact: "no behavior change; the goal of the request is not met" }
+  UNDEFINED_CONCEPT:
+    question: "The requirement mentions \"{text}\", which the system does not have. How should it be treated?"
+    allowFreeText: true
+    options:
+      - { optionId: A, label: "Out of scope: no link is exempt", impact: "no new concept is introduced; the rule applies to every link" }
+      - { optionId: B, label: "Introduce the concept as a separate new capability", impact: "requires a new requirement, design, and approval before this change" }
+  CONFLICT:
+    question: "Two rules contradict each other (\"{text}\"). Which rule applies?"
+    allowFreeText: true
+    options:
+      - { optionId: A, label: "The general rule applies without exceptions", impact: "the exception is dropped" }
+      - { optionId: B, label: "Keep the exception for a defined group", impact: "the group must be defined first (see the undefined concept)" }
+  UNBOUNDED_SCOPE:
+    question: "\"{text}\" has no measurable outcome. What should happen with it?"
+    allowFreeText: true
+    options:
+      - { optionId: A, label: "Defer to the backlog", impact: "excluded from this change; recorded as a scope exclusion" }
+      - { optionId: B, label: "Specify concrete, testable improvements now", impact: "requires new acceptance criteria and possibly a new capability" }
+  MISSING_ACCEPTANCE_CRITERIA:
+    question: "The requirement has no acceptance criteria. How should success be verified?"
+    allowFreeText: true
+    options:
+      - { optionId: A, label: "Derive acceptance criteria from the answers to the other questions", impact: "criteria are generated from the decisions and recorded in the new requirement version" }
+      - { optionId: B, label: "Provide acceptance criteria in free text", impact: "the provided criteria become the new requirement version" }
+  UNSPECIFIED_TYPE:
+    question: "Is this a new capability or a change to existing behavior?"
+    allowFreeText: false
+    options:
+      - { optionId: A, label: "New capability", impact: "greenfield path; no impact analysis or regression testing" }
+      - { optionId: B, label: "Change to existing behavior", impact: "brownfield path: impact analysis and regression testing are added" }
+  UNKNOWN_CAPABILITY:
+    question: "The requirement does not match any known capability. How should it be scoped?"
+    allowFreeText: true
+    options:
+      - { optionId: A, label: "Out of scope for the URL shortener", impact: "the run ends without implementation" }
+      - { optionId: B, label: "Describe the capability in more detail", impact: "a new requirement version is analyzed" }
+  EXISTING_DATA:
+    question: "Should the change also apply to existing links?"
+    allowFreeText: false
+    options:
+      - { optionId: A, label: "No: existing links are unchanged", impact: "only links created after the release are affected; no data migration" }
+      - { optionId: B, label: "Yes: update existing links", impact: "a data migration changes consumers' links and needs a separate human decision" }

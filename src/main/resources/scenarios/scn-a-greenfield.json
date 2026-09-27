@@ -1,0 +1,17 @@
+{
+  "ref": "GF-001",
+  "title": "Custom aliases for short links.",
+  "type": "NEW_CAPABILITY",
+  "narrative": "As an API consumer, I want to optionally choose a custom alias when I create a short link so that I can share memorable links.",
+  "acceptanceCriteria": [
+    "Given the capability is released, when a consumer creates a link for a valid URL with the alias `spring-sale`, then the link is created and its short code is `spring-sale`.",
+    "Given the alias `spring-sale` is in use, when another link is created with the alias `spring-sale`, then creation is rejected with error code `ALIAS_CONFLICT`.",
+    "Given an alias containing characters other than letters, digits, hyphen, or underscore, when a link is created, then creation is rejected with error code `INVALID_ALIAS`.",
+    "Given an alias shorter than 3 or longer than 32 characters, when a link is created, then creation is rejected with error code `INVALID_ALIAS`.",
+    "Given a reserved alias such as `api`, when a link is created, then creation is rejected with error code `RESERVED_ALIAS`.",
+    "Given a link created with an alias, when the alias is resolved, then the client is redirected to the target URL."
+  ],
+  "constraints": [
+    "Aliases are case-sensitive, like generated codes, and share the code namespace."
+  ]
+}

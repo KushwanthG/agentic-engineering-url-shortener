@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agentic-sdlc:schema:verification-report:1.0.0",
+  "title": "VerificationReport",
+  "description": "Output of TESTING, REGRESSION_TESTING, and SECURITY_VERIFICATION: executed probes and their results (FR-ORC-16).",
+  "type": "object",
+  "required": ["suite", "results", "unverifiedCriteria", "passed", "failed", "syntheticRecordsCreated", "syntheticRecordsRemoved"],
+  "additionalProperties": false,
+  "properties": {
+    "suite": { "enum": ["ACCEPTANCE", "REGRESSION", "SECURITY"] },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["probeId", "description", "verifies", "passed", "evidence", "durationMillis"],
+        "additionalProperties": false,
+        "properties": {
+          "probeId": { "type": "string" },
+          "description": { "type": "string" },
+          "verifies": { "type": "array", "items": { "type": "string" } },
+          "passed": { "type": "boolean" },
+          "evidence": { "type": "string" },
+          "durationMillis": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "unverifiedCriteria": { "type": "array", "items": { "type": "string" } },
+    "passed": { "type": "integer", "minimum": 0 },
+    "failed": { "type": "integer", "minimum": 0 },
+    "syntheticRecordsCreated": { "type": "integer", "minimum": 0 },
+    "syntheticRecordsRemoved": { "type": "integer", "minimum": 0 }
+  }
+}

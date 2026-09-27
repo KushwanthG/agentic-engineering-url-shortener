@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agentic-sdlc:schema:normalized-requirement:1.0.0",
+  "title": "NormalizedRequirement",
+  "description": "Output of REQUIREMENT_ANALYSIS: interpretation, requirement-quality checks, and detected ambiguities (FR-ORC-13).",
+  "type": "object",
+  "required": ["requirementVersion", "classification", "classificationBasis", "actors", "capabilities", "acceptanceCriteria", "qualityChecks", "ambiguities", "clarificationRequired", "clarificationRationale"],
+  "additionalProperties": false,
+  "properties": {
+    "requirementRef": { "type": ["string", "null"] },
+    "requirementVersion": { "type": "integer", "minimum": 1 },
+    "classification": { "enum": ["NEW_CAPABILITY", "CHANGE_TO_EXISTING", "UNDETERMINED"] },
+    "classificationBasis": { "type": "string" },
+    "actors": { "type": "array", "items": { "type": "string" } },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "matchedTerms", "baseline"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "matchedTerms": { "type": "array", "items": { "type": "string" } },
+          "baseline": { "type": "boolean" }
+        }
+      }
+    },
+    "acceptanceCriteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "text", "testable"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "text": { "type": "string" },
+          "given": { "type": ["string", "null"] },
+          "when": { "type": ["string", "null"] },
+          "then": { "type": ["string", "null"] },
+          "testable": { "type": "boolean" }
+        }
+      }
+    },
+    "constraints": { "type": "array", "items": { "type": "string" } },
+    "parameters": { "type": "object" },
+    "qualityChecks": {
+      "type": "array",
+      "minItems": 5,
+      "items": {
+        "type": "object",
+        "required": ["check", "result", "evidence"],
+        "additionalProperties": false,
+        "properties": {
+          "check": { "enum": ["COMPLETENESS", "CONSISTENCY", "TESTABILITY", "POLICY", "ARCHITECTURE_BOUNDARY"] },
+          "result": { "enum": ["PASS", "FAIL"] },
+          "evidence": { "type": "string" }
+        }
+      }
+    },
+    "ambiguities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "severity", "blocking", "text", "affects", "explanation"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "enum": ["VAGUE_TERM", "UNDEFINED_CONCEPT", "CONFLICT", "MISSING_ACCEPTANCE_CRITERIA", "UNTESTABLE_CRITERION", "UNKNOWN_CAPABILITY", "UNSPECIFIED_TYPE", "UNBOUNDED_SCOPE"] },
+          "severity": { "enum": ["HIGH", "MEDIUM", "LOW"] },
+          "blocking": { "type": "boolean" },
+          "text": { "type": "string" },
+          "affects": { "type": "array", "items": { "type": "string" } },
+          "explanation": { "type": "string" }
+        }
+      }
+    },
+    "clarificationRequired": { "type": "boolean" },
+    "clarificationRationale": { "type": "string" }
+  }
+}

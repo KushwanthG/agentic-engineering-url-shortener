@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agentic-sdlc:schema:task-graph:1.0.0",
+  "title": "TaskGraph",
+  "description": "Output of DECOMPOSITION: dependency-aware engineering tasks mapped to acceptance criteria.",
+  "type": "object",
+  "required": ["capabilities", "tasks", "criticalPath"],
+  "additionalProperties": false,
+  "properties": {
+    "capabilities": { "type": "array", "items": { "type": "string" } },
+    "tasks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "kind", "capability", "acceptanceCriteria", "dependsOn", "parallelizable"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^WT-[0-9]{2}$" },
+          "title": { "type": "string" },
+          "kind": { "enum": ["CONTRACT", "SCHEMA", "DOMAIN", "API", "TEST", "DOCUMENTATION", "RELEASE"] },
+          "capability": { "type": "string" },
+          "component": { "type": ["string", "null"] },
+          "acceptanceCriteria": { "type": "array", "items": { "type": "string" } },
+          "dependsOn": { "type": "array", "items": { "type": "string" } },
+          "parallelizable": { "type": "boolean" }
+        }
+      }
+    },
+    "criticalPath": { "type": "array", "items": { "type": "string" } }
+  }
+}

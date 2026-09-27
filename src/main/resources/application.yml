@@ -1,0 +1,86 @@
+# Default profile = secure defaults: no principals (authenticated APIs return 401),
+# fault injection disabled, only health/info public. See docs/adr/ADR-014 and ADR-015.
+spring:
+  application:
+    name: agentic-sdlc-url-shortener
+  datasource:
+    # H2 is the runtime database (candidate directive); file mode so runs survive restarts.
+    url: jdbc:h2:file:./data/agentic-sdlc;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;LOCK_TIMEOUT=10000;TIME ZONE=UTC
+    username: sa
+    password: ""
+    hikari:
+      connection-timeout: 2000
+      maximum-pool-size: 20
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+      # Review RC-6: no statement (agents reach the store through the port) can block an attempt forever.
+      jakarta.persistence.query.timeout: 15000
+  flyway:
+    locations: classpath:db/migration
+
+server:
+  port: 8080
+  error:
+    include-stacktrace: never
+    include-message: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,sbom
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+      group:
+        readiness:
+          include: readinessState,linkStore
+
+logging:
+  pattern:
+    level: "%5p [corr=%X{correlationId:-} run=%X{runId:-} stage=%X{stage:-} attempt=%X{attempt:-}]"
+
+app:
+  shortener:
+    base-url: http://localhost:8080
+    code-length: 7
+    code-generation-attempts: 5
+    max-url-length: 2048
+    max-expiry: P1826D
+    idempotency-window: PT24H
+    analytics-window-days: 30
+    self-hosts: []
+    reserved-aliases: [api, actuator, admin, health, login, logout, static, assets, swagger, docs, error, favicon.ico, robots.txt]
+    rate-limit:
+      creation-per-minute: 30
+      not-found-per-minute: 60
+      max-tracked-clients: 10000
+  security:
+    principals: []
+  orchestration:
+    codebase-root: .
+    audit-retention-days: 365
+    gate-deadline: PT24H
+    deadline-sweep-interval: PT5S
+    max-clarification-rounds: 3
+    stage-executor-threads: 8
+    stages:
+      # PVT-11 and PVT-12; per-stage values go under overrides.<STAGE_TYPE>.
+      defaults:
+        max-attempts: 3
+        timeout: PT30S
+        initial-backoff: PT0.2S
+        max-backoff: PT5S
+    autonomy:
+      max-attempts: 60
+      max-processing-time: PT10M
+    fault-injection:
+      enabled: false

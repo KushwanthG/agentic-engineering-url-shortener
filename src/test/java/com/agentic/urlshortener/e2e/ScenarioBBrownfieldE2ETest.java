@@ -21,6 +21,7 @@ import com.agentic.urlshortener.common.util.CanonicalJson;
 import com.agentic.urlshortener.orchestration.audit.AuditService;
 import com.agentic.urlshortener.orchestration.audit.AuditVerification;
 import com.agentic.urlshortener.orchestration.domain.AuditEvent;
+import com.agentic.urlshortener.support.ArtifactSchemas;
 import com.agentic.urlshortener.support.GovernanceInvariants;
 import com.agentic.urlshortener.support.EvidenceExporter;
 import com.agentic.urlshortener.support.HttpDriver;
@@ -77,6 +78,7 @@ class ScenarioBBrownfieldE2ETest {
 
         JsonNode run = http.awaitTerminal(runPath);
         GovernanceInvariants.assertHold(http, runPath);
+        assertThat(ArtifactSchemas.assertRunArtifactsValid(http, runPath)).isGreaterThan(10);
         assertThat(run.path("status").asString()).as("terminal reason: %s", run.path("terminalReason")).isEqualTo("COMPLETED");
         assertThat(run.path("readiness").asString()).isEqualTo("READY");
         assertThat(run.path("classification").asString()).isEqualTo("CHANGE_TO_EXISTING");

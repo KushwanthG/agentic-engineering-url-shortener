@@ -308,3 +308,17 @@ security rules unchanged (deny-by-default; redirect route public by design); all
 - **Contracts and schemas.** No contract or schema file changed. Every new endpoint response is
   validated against `openapi.yaml`.
 - **Reporting.** Metric figures are labeled demonstration data. No approvals were recorded.
+
+---
+
+## Checkpoint: Phase 10a — quality gates (T110, T111, T113, T127; T128 not executed)
+
+| # | Item | Record |
+|---|------|--------|
+| 1 | Completed tasks | T110, T111, T113, T127. T128 is not executed: the scanner is not installed; the limitation is recorded |
+| 2 | Requirements addressed | NFR-CHG-01, FR-ORC-10, NFR-PRF-01 (measured, **not met**), NFR-SEC-03; NFR-SEC-05 open |
+| 4 | Files created or changed | `contract/{ContractDriftTest, ArtifactSchemaTest}`, `WorkflowApiContractTest` (evidence test), `support/ArtifactSchemas` (type-to-schema map, run-wide validation), SCN-A/B/C e2e tests (schema validation), `performance/PerformanceMeasurementTest`, `security/RepositorySecretScanTest` and `test/resources/secret-scan-fixtures/`, `docs/assessment/{performance.md, security-scans.md}` |
+| 8 | Actual outcomes | all new tests green; performance targets missed (documented) |
+| 11 | Deviations from plan | (a) **T111** validates the scenario artifacts inside the existing SCN-A/B/C e2e tests instead of re-running the scenarios in `ArtifactSchemaTest`, which proves the mapping is complete and that every schema rejects an empty document. (b) **T127** has a keyed allow-list of 7 reviewed non-secret matches besides the demo tokens. (c) **T128** was not run (see `security-scans.md`) |
+| 12 | New risks | PVT-19 and PVT-20 are not met on this machine; the causes are hypotheses, not profiled |
+| 18 | Human approval required | performance miss (NFR-PRF-01), dependency-scan gap (NFR-SEC-05), and deviations (a)–(c) at G6 |

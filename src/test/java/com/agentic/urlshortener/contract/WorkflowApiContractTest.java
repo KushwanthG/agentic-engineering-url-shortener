@@ -77,4 +77,29 @@ class WorkflowApiContractTest {
                 .header(HttpHeaders.AUTHORIZATION, Tokens.bearer(Tokens.RELEASE_OWNER)).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"decision\":\"APPROVE\",\"rationale\":\"release (simulated human input)\"}")).andReturn(), 200);
     }
+
+    /** T110: governance and evidence responses of a completed run, validated against the contract. */
+    @Test
+    void evidenceResponsesOfACompletedRunMatchTheContract() throws Exception {
+        MvcResult created = mvc.perform(post("/api/v1/workflows").header(HttpHeaders.AUTHORIZATION, Tokens.bearer(Tokens.REQUESTER))
+                .contentType(MediaType.APPLICATION_JSON).content(RequirementFixtures.API_SUBMISSION)).andReturn();
+        UUID runId = UUID.fromString(CanonicalJson.parse(created.getResponse().getContentAsString()).path("runId").asString());
+        await().atMost(Duration.ofSeconds(20)).until(() -> runs.findById(runId).orElseThrow().getStatus() == RunStatus.AWAITING_HUMAN);
+        String base = "/api/v1/workflows/" + runId;
+        mvc.perform(post(base + "/gates/RELEASE_APPROVAL/decision").header(HttpHeaders.AUTHORIZATION, Tokens.bearer(Tokens.RELEASE_OWNER))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"decision\":\"APPROVE\",\"rationale\":\"release (simulated human input)\"}"));
+        await().atMost(Duration.ofSeconds(20)).until(() -> runs.findById(runId).orElseThrow().getStatus() == RunStatus.COMPLETED);
+
+        for (String path : new String[] {base + "/audit", base + "/audit/verification", base + "/summary", base + "/decisions",
+                "/api/v1/policies", "/api/v1/capabilities", "/api/v1/reliability/report"}) {
+            assertContract("GET", path, get(path, Tokens.AUDITOR), 200);
+        }
+        assertContract("POST", base + "/pause", mvc.perform(post(base + "/pause")
+                .header(HttpHeaders.AUTHORIZATION, Tokens.bearer(Tokens.RELEASE_OWNER)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reason\":\"after completion (simulated human input)\"}")).andReturn(), 409);
+        assertContract("POST", base + "/clarifications", mvc.perform(post(base + "/clarifications")
+                .header(HttpHeaders.AUTHORIZATION, Tokens.bearer(Tokens.APPROVER)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"answers\":[{\"questionId\":\"Q-1\",\"optionId\":\"A\"}],\"rationale\":\"late (simulated human input)\"}"))
+                .andReturn(), 409);
+    }
 }

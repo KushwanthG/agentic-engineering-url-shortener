@@ -110,8 +110,9 @@ A transient `TESTING` failure that recovers through bounded retry is drill **RDR
 same GF-001 input with `TRANSIENT_ERROR` ×2 on `TESTING`, a labeled simulated fault. The recorded
 result: attempts `FAILED_TRANSIENT`, `FAILED_TRANSIENT`, `SUCCEEDED`, and the run `COMPLETED`. The
 other failure paths on the same input (fallback, rollback, gate deadline, policy exception, operator
-stop) are drills RDR-02..RDR-07: see [drills.md](drills.md). A material ambiguity that emerges
-later suspends only the affected path (FR-RPL-06, Phase 8).
+stop) are drills RDR-02..RDR-07: see [drills.md](drills.md). Suspending only the affected path
+when a material ambiguity emerges mid-run (FR-RPL-06, task T096) is **not implemented**: it is
+deferred under scope decision SD-1. Ambiguity is handled at intake (SCN-C).
 
 ## 8. Evidence index
 

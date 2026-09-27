@@ -420,16 +420,16 @@ release readiness.
 
 ### API and schema deliverables
 
-- [ ] T110 [P] Add `test/contract/ContractDriftTest.java` (every controller mapping appears in `openapi.yaml` and every contract path is implemented) and complete `test/contract/WorkflowApiContractTest.java` for governance, operations, and evidence responses
+- [X] T110 [P] Add `test/contract/ContractDriftTest.java` (every controller mapping appears in `openapi.yaml` and every contract path is implemented) and complete `test/contract/WorkflowApiContractTest.java` for governance, operations, and evidence responses
   - Req: NFR-CHG-01 · Scn: — · ADR: ADR-013 · Deps: T101 · Out: contract drift test · TDD: Verification · Val: `mvnw test -Dtest=ContractDriftTest,WorkflowApiContractTest` · Doc: — · Trace: tags NFR-CHG-01 · Risk: — · Done: default · Appr: default
-- [ ] T111 [P] Add `test/contract/ArtifactSchemaTest.java`: every artifact produced by the SCN-A, SCN-B, and SCN-C runs validates against `feature/contracts/schemas/*.schema.json`
+- [X] T111 [P] Add `test/contract/ArtifactSchemaTest.java`: every artifact produced by the SCN-A, SCN-B, and SCN-C runs validates against `feature/contracts/schemas/*.schema.json`
   - Req: FR-ORC-10, NFR-CHG-01 · Scn: SCN-A, SCN-B, SCN-C · ADR: ADR-013 · Deps: T097 · Out: schema validation · TDD: Verification · Val: `mvnw test -Dtest=ArtifactSchemaTest` · Doc: — · Trace: tags FR-ORC-10 · Risk: schema drift. Guardrail: failing test names the artifact · Done: default · Appr: default
 - [ ] T112 Write the contract compatibility review `docs/api/compatibility-review.md` (1.0.0 → 1.1.0 → 1.2.0 changes classified, consumers, examples, migrations V3/V4, rollback) and confirm `feature/contracts/CHANGELOG.md` matches; **change-control approval** of contract versions 1.1.0 and 1.2.0 by the candidate
   - Req: NFR-CHG-01, NFR-CHG-02 · Scn: SCN-A, SCN-B · ADR: ADR-013 · Deps: T110, T111 · Out: compatibility review · TDD: N/A · Val: review document complete · Doc: new doc · Trace: — · Risk: — · Done: document committed · Appr: **REQUIRED — PENDING (candidate change-control approval)**
 
 ### Quality gates
 
-- [ ] T113 [P] Add `test/performance/PerformanceMeasurementTest.java` (20 concurrent clients: redirect and creation p95 measured; generous regression bound) and write `docs/assessment/performance.md` (labeled demonstration measurement, machine, load profile)
+- [X] T113 [P] Add `test/performance/PerformanceMeasurementTest.java` (20 concurrent clients: redirect and creation p95 measured; generous regression bound) and write `docs/assessment/performance.md` (labeled demonstration measurement, machine, load profile)
   - Req: NFR-PRF-01, NFR-PRF-02 · Scn: — · ADR: ADR-016 · Deps: T031 · Out: measurement · TDD: Verification · Val: `mvnw test -Dtest=PerformanceMeasurementTest` · Doc: new doc · Trace: tags NFR-PRF-01 · Risk: flaky timing. Guardrail: only a generous bound is asserted · Done: default · Appr: default
 - [ ] T114 [P] Add `test/orchestration/ExtensibilityTest.java` (a new policy rule bean plus YAML entry is evaluated without scheduling-core changes; the coordinator runs arbitrary scripted stage graphs)
   - Req: NFR-MNT-02 · Scn: — · ADR: ADR-005, ADR-019 · Deps: T052 · Out: verification test · TDD: Verification · Val: `mvnw test -Dtest=ExtensibilityTest` · Doc: — · Trace: tags NFR-MNT-02 · Risk: — · Done: default · Appr: default
@@ -449,7 +449,7 @@ release readiness.
 
 ### Release-readiness security checks (constitution V)
 
-- [ ] T127 [P] Test first in `test/security/RepositorySecretScanTest.java`: scan every git-tracked text file for private-key blocks, cloud access keys, bearer tokens, and `password=` or `secret=` values; allow-list only the labeled demo tokens and their SHA-256 hashes; prove detection with planted fixtures under `src/test/resources/secret-scan-fixtures/` (excluded from the real scan); fail on any finding
+- [X] T127 [P] Test first in `test/security/RepositorySecretScanTest.java`: scan every git-tracked text file for private-key blocks, cloud access keys, bearer tokens, and `password=` or `secret=` values; allow-list only the labeled demo tokens and their SHA-256 hashes; prove detection with planted fixtures under `src/test/resources/secret-scan-fixtures/` (excluded from the real scan); fail on any finding
   - Req: NFR-SEC-03, Constitution V · Scn: — · ADR: ADR-015 · Deps: T116 · Out: executable secret scan · TDD: Red→Green · Val: `mvnw test -Dtest=RepositorySecretScanTest` · Doc: docs/assessment/security-scans.md · Trace: tags NFR-SEC-03 · Risk: false negatives. Guardrail: fixture per pattern · Done: default · Appr: default
 - [ ] T128 [P] Run a dependency vulnerability scan: OSV-Scanner (pinned release) against `target/classes/META-INF/sbom/application.cdx.json`; record every finding with severity, affected component, and disposition (upgrade, not reachable, accepted) in `docs/assessment/security-scans.md`. If the scanner cannot run in this environment, record the gap as a release limitation that needs the candidate's exception at G6
   - Req: NFR-SEC-05, Constitution V · Scn: — · ADR: ADR-002, ADR-019 · Deps: T115 · Out: scan report · TDD: N/A · Val: scan command and its actual output recorded · Doc: security-scans doc · Trace: — · Risk: known vulnerable dependency shipped. Guardrail: HIGH/CRITICAL findings block T122 until dispositioned · Done: report committed · Appr: an accepted finding needs the candidate's exception (PENDING if any)

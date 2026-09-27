@@ -278,3 +278,16 @@ from the Maven output.
      listed as DEFERRED (SD-1) in the test and in the generated matrix, not hidden. The test fails
      once either gains a test, so the deferral list cannot go stale.
    - Nine NFR and success-criterion ids have no tag and are reported as `NO TEST` in the matrix.
+
+## Phase 10a — quality gates (T110, T111, T113, T127, T128)
+
+Verification tasks, as tasks.md specifies (TDD "Verification"), except T127, which proves each
+detection pattern first against a planted fixture. Runs of 2026-09-27.
+
+| Task | Test(s) | Observed |
+|------|---------|----------|
+| T110 | `ContractDriftTest` (2); `WorkflowApiContractTest` gained the evidence, operations, and clarification responses | No drift in either direction on the first run. One failure was the test's own sanity bound (">30" operations; the contract has 29 `operationId`s), now an exact count. Then 2/2 and 2/2 |
+| T111 | `ArtifactSchemaTest` (3); `assertRunArtifactsValid` in the SCN-A/B/C e2e tests | 3/3. Every artifact of the three scenario runs, superseded ones included, validates against its schema (more than 10 per run) |
+| T113 | `PerformanceMeasurementTest` (1) | Passes the regression bound (10× the targets). **Targets not met reliably**: see `performance.md` (redirect p95 119 ms and 220 ms against 50 ms) |
+| T127 | `RepositorySecretScanTest` (3) | First run: 7 findings. Each was triaged by reading the line: all 7 are non-secrets, now in a keyed allow-list with reasons; a stale entry fails the test. A second finding came from the allow-list's own reason text, which was reworded. Then 3/3 |
+| T128 | OSV-Scanner | **Not run**: the scanner is not installed; recorded as a release limitation in `security-scans.md` |

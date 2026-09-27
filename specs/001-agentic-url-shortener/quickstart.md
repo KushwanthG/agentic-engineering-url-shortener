@@ -64,6 +64,9 @@ fault injection disabled (secure defaults). Delete `./data/` to start from an em
 | `carol` | `RELEASE_OWNER` | `demo-release-token` |
 | `rita` | `AUDITOR` | `demo-auditor-token` |
 
+Which token each API needs is listed in the [README](../../README.md#quick-start) ("Which token for
+which API").
+
 Health check: `curl http://localhost:8080/actuator/health` → a response containing `"status":"UP"`.
 At startup, the demo profile logs a `DEMO PROFILE ACTIVE` non-production warning.
 

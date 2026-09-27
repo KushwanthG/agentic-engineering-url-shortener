@@ -44,6 +44,24 @@ are configured.
 | `demo-release-token` | carol | release owner |
 | `demo-auditor-token` | rita | auditor |
 
+**Which token for which API.** Send the token as `Authorization: Bearer <token>`. These rules are
+enforced by `SecurityConfig`; `…` stands for `/api/v1/workflows/{runId}`.
+
+| API | Token |
+|---|---|
+| `GET /{code}` (redirect), `GET /actuator/health`, `GET /actuator/info` | none |
+| `POST /api/v1/links`, `GET /api/v1/links/{code}`, `GET /api/v1/links/{code}/stats` | `demo-consumer-token` |
+| `POST /api/v1/workflows` (submit a requirement), `POST …/change-requests`, `POST …/policy-exceptions` | `demo-requester-token` |
+| `POST …/gates/ARCHITECTURE_APPROVAL/decision`, `POST …/clarifications`, `POST …/change-requests/{id}/decision`, `POST …/policy-exceptions/{id}/decision` | `demo-approver-token` |
+| `POST …/gates/RELEASE_APPROVAL/decision`, `POST …/pause`, `POST …/resume`, `POST …/safe-stop` | `demo-release-token` |
+| every `GET /api/v1/workflows/**` (run, timeline, artifacts, decisions, audit, summary, …), `GET /api/v1/policies`, `GET /api/v1/capabilities`, `GET /api/v1/reliability/report` | any of the requester, approver, release, or auditor tokens |
+| other `/actuator/**` (metrics, prometheus, sbom) | `demo-auditor-token` |
+
+- **Error codes.** A missing or unknown token returns `401`; a valid token with the wrong role
+  returns `403`.
+- **Separation of duties.** Whoever submitted a run cannot decide its architecture, change, or
+  release gate, even with the right role.
+
 **Walkthrough.** The end-to-end walkthrough (shorten a link, drive a governed run, decide a gate
 yourself, run the drills) is in
 [quickstart.md](specs/001-agentic-url-shortener/quickstart.md) §3–§6.

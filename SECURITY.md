@@ -52,5 +52,5 @@ These are tracked in the [risk register](docs/assessment/risk-register.md).
 
 ## Reporting a vulnerability
 
-This repository is an interview assessment. Report a security concern privately to the repository
+This repository is an assessment. Report a security concern privately to the repository
 owner. Do not open a public issue.

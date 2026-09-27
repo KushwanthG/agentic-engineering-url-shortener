@@ -97,7 +97,7 @@ public class InProcessApplicationPlaneAdapter implements ApplicationPlanePort {
     public ProbeResponse createSyntheticLink(UUID runId, SyntheticLinkSpec spec) {
         try {
             CreatedLink created = creation.create(new CreateLinkCommand(spec.url(), spec.expiresAt(), spec.alias(), spec.maxClicks(),
-                    "run:" + runId.toString().substring(0, 8), null, runId));
+                    "run:" + runId.toString().substring(0, 8), spec.idempotencyKey(), runId));
             return ProbeResponse.created(created.view().code(), created.view().targetUrl());
         } catch (ApiException e) {
             return ProbeResponse.rejected(e.code().name(), e.getMessage());

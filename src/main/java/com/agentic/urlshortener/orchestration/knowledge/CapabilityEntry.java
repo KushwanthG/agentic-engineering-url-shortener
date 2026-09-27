@@ -23,7 +23,8 @@ public record CapabilityEntry(
         List<String> impactedRequirements,
         List<Threat> threats,
         List<DocAnchor> docAnchors,
-        List<Task> tasks) {
+        List<Task> tasks,
+        List<RegressionRisk> regressionRisks) {
 
     public CapabilityEntry {
         keywords = orEmpty(keywords);
@@ -37,6 +38,7 @@ public record CapabilityEntry(
         threats = orEmpty(threats);
         docAnchors = orEmpty(docAnchors);
         tasks = orEmpty(tasks);
+        regressionRisks = orEmpty(regressionRisks);
     }
 
     public record Component(String name, String path, String change, String responsibility) {
@@ -76,6 +78,10 @@ public record CapabilityEntry(
     }
 
     /** A repository document expected to mention the capability. */
+    /** A risk the change poses to existing behavior, with its mitigation (brownfield impact analysis). */
+    public record RegressionRisk(String id, String description, String severity, String mitigation) {
+    }
+
     public record DocAnchor(String path, String mentions) {
     }
 

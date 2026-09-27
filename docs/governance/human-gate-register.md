@@ -280,7 +280,7 @@ and decides whether redirects may be cached.
 
 | Item | Raised by | Status |
 |------|-----------|--------|
-| Review of the brownfield impact analysis before the click-limit code (task T086) | tasks.md | pending — added when T086 runs |
+| Review of the brownfield impact analysis before the click-limit code (task T086): [`docs/scenarios/scn-b-impact-analysis.md`](../scenarios/scn-b-impact-analysis.md), committed before V4 | tasks.md, T086 | **PENDING**: implementation proceeds provisionally |
 | Change-control approval of contract versions 1.1.0 and 1.2.0 (task T112; the review document is deferred by SD-1, the approval itself is still required) | tasks.md | pending |
 | Change-control review of implementation-time refinements: generic error codes `RESOURCE_NOT_FOUND`, `METHOD_NOT_ALLOWED`, `UNSUPPORTED_MEDIA_TYPE` (T009); persistence schema types, `audit_chain_head`, `stage_attempt.scheduling_cycle`, `plan_version.trigger_type` (T007/T012) | Phase 2 checkpoint | pending (was bundled into T112; T112 is deferred by SD-1, so review these directly or via the CHANGELOG) |
 | Exception for any accepted dependency-scan finding (task T128) | tasks.md | pending if applicable |

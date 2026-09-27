@@ -1,9 +1,11 @@
 package com.agentic.urlshortener.orchestration.agent.probes;
 
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.agentic.urlshortener.orchestration.port.ApplicationPlanePort;
+import com.agentic.urlshortener.orchestration.port.LinkSnapshot;
 import com.agentic.urlshortener.orchestration.port.ProbeResponse;
 import com.agentic.urlshortener.orchestration.port.SyntheticLinkSpec;
 
@@ -24,11 +26,19 @@ public final class ProbeContext {
     }
 
     public ProbeResponse create(String url, String alias) {
-        ProbeResponse response = port.createSyntheticLink(runId, new SyntheticLinkSpec(url, alias, null, null));
+        return create(new SyntheticLinkSpec(url, alias, null, null));
+    }
+
+    public ProbeResponse create(SyntheticLinkSpec spec) {
+        ProbeResponse response = port.createSyntheticLink(runId, spec);
         if (response.outcome() == ProbeResponse.Outcome.CREATED) {
             created.incrementAndGet();
         }
         return response;
+    }
+
+    public Optional<LinkSnapshot> find(String code) {
+        return port.findLink(code);
     }
 
     public ProbeResponse resolve(String code) {

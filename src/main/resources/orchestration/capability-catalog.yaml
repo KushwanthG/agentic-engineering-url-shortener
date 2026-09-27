@@ -105,9 +105,14 @@ capabilities:
     rollback: "Withdraw the click-limit flag: new limits are rejected; stored limits stay enforced (Q4); V4 is additive (nullable column) and stays."
     acceptanceProbes: [CL-P1, CL-P2, CL-P3, CL-P4, CL-P5, CL-P6]
     securityProbes: [SEC-URL-CATALOG, CL-SEC-BOUNDS]
-    regressionProbes: [R-P1, R-P2, R-P3, R-P4]
+    regressionProbes: [R-P1, R-P2, R-P3, R-P4, R-P5, R-P6]
     impactSeeds: [RedirectService, ClickRecorder, ShortLink, LinkCreationService, ShortLinkRepository]
     impactedRequirements: [FR-ANL-04, FR-RED-04, FR-LNK-11]
+    regressionRisks:
+      - { id: RR-CL-1, description: "redirect latency grows with the conditional increment on every limited redirect", severity: MEDIUM, mitigation: "single-statement conditional UPDATE; unlimited links keep the unconditional path (R-P2)" }
+      - { id: RR-CL-2, description: "lost updates let concurrent resolutions exceed the limit", severity: HIGH, mitigation: "atomic UPDATE ... WHERE click_count < max_clicks; concurrency probe CL-P3" }
+      - { id: RR-CL-3, description: "limited links fail closed while unlimited links fail open, so analytics outages behave differently per link", severity: MEDIUM, mitigation: "fail-closed only when max_clicks is set (AC-6); unlimited links unchanged (R-P4)" }
+      - { id: RR-CL-4, description: "existing links or clients that never send maxClicks change behavior", severity: HIGH, mitigation: "nullable column, no default; regression probes R-P1..R-P6 run with the capability enabled" }
     threats:
       - { id: TH-CL-1, category: TAMPERING, description: "concurrent resolutions exceed the limit (lost updates)", severity: HIGH, mitigation: "conditional atomic SQL increment", verifiedBy: [CL-P3] }
       - { id: TH-CL-2, category: DENIAL_OF_SERVICE, description: "a huge or negative limit abuses storage or logic", severity: MEDIUM, mitigation: "range 1..1,000,000 enforced by API and CHECK constraint", verifiedBy: [CL-SEC-BOUNDS] }
@@ -147,6 +152,9 @@ capabilities:
     regressionProbes: [R-P1, R-P2, R-P3]
     impactSeeds: [LinkCreationService, ShortLink]
     impactedRequirements: [FR-LNK-12, FR-RED-04]
+    regressionRisks:
+      - { id: RR-DE-1, description: "links created without an expiry start to expire", severity: HIGH, mitigation: "the default applies only to links created after release; stored links keep their expiry (R-P3)" }
+      - { id: RR-DE-2, description: "clients relying on non-expiring links break", severity: MEDIUM, mitigation: "explicit expiresAt still wins; the default is a release parameter and can be withdrawn" }
     threats:
       - { id: TH-DE-1, category: DENIAL_OF_SERVICE, description: "a wrong default expires consumers' links unexpectedly", severity: MEDIUM, mitigation: "human-decided parameter; existing links unchanged", verifiedBy: [DE-P3] }
       - { id: TH-URL-1, category: SPOOFING, description: "links point at a malicious or internal target", severity: HIGH, mitigation: "URL policy unchanged", verifiedBy: [SEC-URL-CATALOG] }

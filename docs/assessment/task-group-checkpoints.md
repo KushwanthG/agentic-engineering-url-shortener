@@ -335,3 +335,18 @@ security rules unchanged (deny-by-default; redirect route public by design); all
 | 11 | Deviations and findings | (a) **Checker fix.** A strictness bug in the governance-invariant checker, found while writing the overview: `ARCHITECTURE_APPROVAL` is a conditional gate (skipped for non-material changes), and the checker would have flagged such a skip. Conditional gates may now be SKIPPED, but only directly from PENDING. A gate skipped after it awaited a decision is still reported, which a new negative fixture proves. The e2e runs are still green. (b) **Risk statuses.** The register marks two ADR mitigations as not in place: ADR-011's autonomy budget (R-17) and ADR-009's JDBC query timeout for agents (R-14) |
 | 16 | Commit message | `docs: add README, security, contributing, architecture overview, limitations, and risk register` |
 | 17 | Next task group | Phase 10c: T120 (clean-clone quickstart validation), T121 (convergence), T122 (readiness proposal), T123 (final summary), T124 (reviewer guide) |
+
+---
+
+## Checkpoint: Phase 10c — validation, convergence, readiness (T120–T124; T133, T135, T136 from convergence)
+
+| # | Item | Record |
+|---|------|--------|
+| 1 | Completed tasks | T120 (clean-clone quickstart), T121 (`/speckit-converge`: outcome `tasks_appended`, Phase 11 with T133–T136), T122 (readiness proposal: **NOT READY**), T123 (21-section final summary), T124 (reviewer guide, 25 items). Convergence fixes: T133 (**CRITICAL**, constitution V: generated password logged at startup), T135 (demo startup warning), T136 (quickstart corrections) |
+| 7 | Validation commands executed | clean-clone `mvnw clean verify` → 528/528 green in 202 s; quickstart §3–§6 by hand (simulated decisions, labeled); `mvnw test -Dsurefire.runOrder=random` → 528/528; final `mvnw -B -ntp clean verify` at `2a2a0bf` → **530 tests, 0 failures**, 163 s; the reviewer-guide test commands → 53/53 and 19/19 |
+| 8 | Actual outcomes | all green. Coverage 95.0% (measured). Readiness proposal NOT READY (gates unratified; T074, T096, T128, and T134 open) |
+| 11 | Deviations and findings | (a) The guide's 21-section and 25-item structures were taken from the assignment brief, which is **not committed**. They were read from this session's record of the brief the candidate supplied. (b) T121's findings F2–F4 were not re-added (deferred or existing tasks). (c) T134 (performance) is left open for the candidate's G6 decision |
+| 12 | New risks | none beyond the risk register |
+| 16 | Commit message | `docs(assessment): add quickstart validation, convergence report, readiness proposal, final summary, and reviewer guide` |
+| 17 | Next | the candidate: review the gate register; decide T074, T096, T128, and T134; G6 (T125) and G7 (T126) |
+| 18 | Human approval required | G1–G7, all ADRs, and every pending entry in the gate register |

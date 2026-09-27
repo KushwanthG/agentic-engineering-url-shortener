@@ -17,8 +17,9 @@ scenario, or drill it verifies, and `TraceabilityMatrixTest` enforces the taggin
 | Measurement | Latency under 20 concurrent clients (a regression bound only) | `PerformanceMeasurementTest` |
 | Traceability | spec ↔ tests ↔ tasks | `TraceabilityMatrixTest` |
 
-The suite contains 102 test classes: 60 in orchestration, 18 in the shortener, 6 end-to-end,
-5 contract, 5 common, 3 security, 1 architecture, 1 persistence, 1 traceability, and 1 performance.
+The suite contains 103 test classes: 60 in orchestration, 18 in the shortener, 6 end-to-end,
+5 contract, 5 common, 4 security, 1 architecture, 1 persistence, 1 traceability, 1 performance, and the
+walking skeleton.
 [convergence-report.md](convergence-report.md) records the executed totals and results.
 
 **TDD.** Red and green runs are recorded per phase in [tdd-evidence.md](tdd-evidence.md).

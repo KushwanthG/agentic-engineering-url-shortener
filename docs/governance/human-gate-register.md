@@ -296,3 +296,4 @@ and decides whether redirects may be cached.
 | Phase 8 deviations (a)–(i) (`task-group-checkpoints.md`, Phase 8 row 11): approval carry-over on re-planning, materiality rules, and the change-gate limitation | Phase 8 checkpoint | pending review |
 | Phase 9 deviations (a)–(j) (`task-group-checkpoints.md`, Phase 9 row 11) and the two unimplemented FR MUSTs (FR-ORC-18, FR-RPL-06; SD-1) for G6 | Phase 9 checkpoint | pending review |
 | Phase 10a: NFR-PRF-01 not met (`performance.md`), dependency scan not executed (`security-scans.md`, T128), deviations (a)–(c) | Phase 10a checkpoint | pending review (G6) |
+| Phase 10c: release-readiness proposal **NOT READY** (`release-readiness.md`) with open items O-1 to O-5; convergence fixes T133, T135, and T136 applied; T134 (performance) open | Phase 10c checkpoint | pending: G6 decision (T125) |

@@ -42,7 +42,8 @@ which follows the candidate's instruction to implement what submission needs. At
 CP1–CP3 all must-have scope was complete.
 - **Delivered:** Phases 1–10: US1–US7, the three scenarios, the seven drills, evidence, and quality
   gates.
-- **Deferred [Deferred]:** T074, T096, T107, T109, T112, T114, T115, T119.
+- **Deferred [Deferred]:** T096, T107, T109, T112, T114, T115, T119. (T074 was deferred too and has
+  since been implemented at the candidate's instruction.)
 
 ## 3. Confirmed requirements, assumptions, exclusions, and deferred scope
 
@@ -263,7 +264,7 @@ A planted typo was detected [Confirmed].
 ## 19. Known limitations, technical debt, and deferred enhancements
 
 **Deferred [Deferred]:**
-- FR-ORC-18 (T074) and FR-RPL-06 (T096);
+- FR-RPL-06 (T096);
 - T107, T109, T112, T114, T115, T119.
 
 **Limitations [Limitation]:**
@@ -296,13 +297,13 @@ decisions, not defects hidden in the code.
 
 **Unresolved blockers [Blocker]:**
 1. Ratify G1–G5 and decide each ADR: the candidate.
-2. Decide on FR-ORC-18 and FR-RPL-06: implement T074 (about 45 min) and T096 (about 2 h), or
-   accept them at G6.
+2. Decide on FR-RPL-06: implement T096 (about 2 h), or accept it at G6. (FR-ORC-18 is implemented:
+   T074.)
 3. Accept the performance miss (T134), or have it profiled and fixed.
 4. Review the deviations in the gate register.
 
 **Recommended next actions [Recommendation]:**
-- Before submission: T074, then G6/T125 and G7/T126 (tag `assessment-submission-v1.0`).
+- Before submission: G6/T125 and G7/T126 (tag `assessment-submission-v1.0`).
 - For production:
   - PostgreSQL with database locks and leader-elected scheduling;
   - an identity provider;

@@ -78,8 +78,8 @@ is reported as `FAILED` and requires manual intervention.
 ## 5. Safe-stop (FR-REL-06)
 
 One procedure serves every trigger (`STAGE_FAILED`, `GATE_DEADLINE`, `OPERATOR_REQUEST`,
-`POLICY_EXCEPTION_REJECTED`, `CLARIFICATION_ROUNDS_EXCEEDED`). It runs under the run lock in one
-transaction:
+`POLICY_EXCEPTION_REJECTED`, `CLARIFICATION_ROUNDS_EXCEEDED`, `AUTONOMY_BUDGET_EXCEEDED`). It runs
+under the run lock in one transaction:
 
 1. Mark the run as stopping, so no new dispatch happens.
 2. Cancel open stages. In-flight attempts see their cancellation signal, and their late results are
@@ -91,6 +91,13 @@ transaction:
 7. Emit `RUN_TERMINATED`.
 
 A second trigger on a terminal run changes nothing, so every run has exactly one terminal outcome.
+
+**Autonomy budget (FR-ORC-18, T074).** `AutonomyBudget` allows 60 stage attempts and 10 minutes of
+attempt processing per run (PVT-17). Time waiting for humans is not counted. The coordinator checks
+the budget before each dispatch; a reused stage consumes none. When the budget is spent, attempts
+created earlier in the same scheduling cycle are discarded without being dispatched, and the run
+safe-stops with trigger `AUTONOMY_BUDGET_EXCEEDED` and a reason naming the exhausted limit. Policy
+AUT-001 separately reports usage above 80% as an advisory.
 
 ## 6. Operator controls (FR-REL-07)
 
@@ -140,8 +147,6 @@ policy evaluations caused by a fault are flagged simulated, and the run view sho
 - **In-process locks.** Run locks, the probe mutex (`SyntheticScope`), retry wake-ups, and the
   deadline sweeper are in-process. That is valid for the single-process H2 deployment (ADR-003,
   backlog BL-02), not for several instances.
-- **No autonomy budget yet.** The autonomy budget (T074: 60 attempts or 10 minutes per run) is
-  deferred by scope decision SD-1. Policy AUT-001 reports budget usage as an advisory only.
 - **Scheduler restarts.** Wake-ups are scheduled in memory. After a restart, `RecoveryService`
   re-schedules them.
 

@@ -318,3 +318,16 @@ later with the candidate's approval to download the scanner.
 **Decision history.** An intermediate attempt to descope T128 and revert the upgrade was reversed
 by the candidate: "please implement t128.. i dont want to chagne the constitution". The candidate
 then chose the upgrade over accepting the findings.
+
+## T074 completed — autonomy budget (2026-09-27)
+
+Deferred by SD-1 at Phase 6. Implemented later at the candidate's instruction ("implement t074").
+Times are UTC.
+
+| Task | Test(s) | Red run (command → observed failure) | Green run (command → result) |
+|------|---------|--------------------------------------|------------------------------|
+| T074 | `AutonomyBudgetTest` (3), limits lowered to 3 attempts and 1 s by `@TestPropertySource` | 17:47 `mvnw test-compile` → exit 1, `AutonomyBudget` missing. 17:48, with `AutonomyBudget` present but not wired into the coordinator, `-Dtest=AutonomyBudgetTest` → 3 tests, 2 errors: `ConditionTimeoutException`, the run never reached `SAFE_STOPPED` (the unit-level limit test passed) | 17:51 `-Dtest=AutonomyBudgetTest,TraceabilityMatrixTest,SafeStopServiceTest,RunCoordinatorTest,FaultInjectionTest` → 23/23; 17:55 `mvnw -B -ntp verify` → 533 tests, 0 failures, BUILD SUCCESS |
+
+`TraceabilityMatrixTest` no longer lists FR-ORC-18 as DEFERRED. The test fails when a deferred id
+gains a test, so the entry had to be removed. The generated matrix now shows FR-ORC-18 and
+NFR-AUT-02 as VERIFIED.

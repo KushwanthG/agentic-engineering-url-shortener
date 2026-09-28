@@ -97,6 +97,9 @@ document still applies: mandatory validation, evidence, and security tasks are n
 | T115 | JaCoCo coverage gate | JaCoCo report still generated | coverage can regress unnoticed |
 | T119 | Traceability docs refresh | T108 enforces the matrix in the build | committed matrix copy may be stale |
 
+**Update 2026-09-27**: T074 was implemented at the candidate's instruction (`AutonomyBudget`,
+`AutonomyBudgetTest`). It is no longer deferred; the rest of SD-1 is unchanged.
+
 **Kept although optional-looking**: T062 (approval race), T110/T111 (contract and schema
 validation), T113 (performance), T127/T128 (secret and dependency scans), T132 (governance
 invariants) — they are validation, security, or critical-path evidence.

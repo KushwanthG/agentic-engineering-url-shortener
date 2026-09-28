@@ -38,7 +38,6 @@ walking skeleton.
 ## 2. Limitations
 
 **Not implemented (spec MUSTs, deferred under scope decision SD-1):**
-- FR-ORC-18: autonomy budget per run (T074).
 - FR-RPL-06: suspending only the affected path when ambiguity is found mid-run (T096). Ambiguity is
   handled at intake (SCN-C).
 

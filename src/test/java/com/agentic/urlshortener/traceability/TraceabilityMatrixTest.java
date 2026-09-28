@@ -43,7 +43,6 @@ class TraceabilityMatrixTest {
 
     /** Requirements deferred by scope decision SD-1 (docs/assessment/timebox-and-scope.md); reported, never hidden. */
     private static final Map<String, String> DEFERRED = Map.of(
-            "FR-ORC-18", "T074 autonomy budget (SD-1)",
             "FR-RPL-06", "T096 late ambiguity during execution (SD-1)");
 
     private static final Pattern FR_DEFINITION = Pattern.compile("(?m)^- \\*\\*(FR-[A-Z]+-\\d+)\\*\\*");

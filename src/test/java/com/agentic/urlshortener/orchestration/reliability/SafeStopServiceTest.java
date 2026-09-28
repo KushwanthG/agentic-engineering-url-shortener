@@ -48,7 +48,7 @@ import com.agentic.urlshortener.support.ScriptedAgent;
  * trigger as a SAFE_STOP decision, and leaves a final summary. Covered triggers: exhausted retries
  * and fallback, gate deadline, operator request, compensation failure (CompensationCoordinatorTest).
  * Mandatory-policy rejection is covered by PolicyExceptionFlowTest (T076), clarification rounds by
- * the SCN-C tests (Phase 8); the autonomy budget (T074) is deferred by SD-1.
+ * the SCN-C tests (Phase 8), the autonomy budget by AutonomyBudgetTest (T074).
  */
 @IntegrationTest
 @Import(ScriptedAgent.Config.class)

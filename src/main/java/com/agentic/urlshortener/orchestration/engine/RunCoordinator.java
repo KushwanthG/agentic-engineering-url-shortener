@@ -48,6 +48,7 @@ import com.agentic.urlshortener.orchestration.domain.WorkflowRun;
 import com.agentic.urlshortener.orchestration.port.ApplicationPlanePort;
 import com.agentic.urlshortener.orchestration.port.DeferredApplicationPlanePort;
 import com.agentic.urlshortener.orchestration.port.PermissionScopedPort;
+import com.agentic.urlshortener.orchestration.reliability.AutonomyBudget;
 import com.agentic.urlshortener.orchestration.reliability.CompensationCoordinator;
 import com.agentic.urlshortener.orchestration.reliability.FailureEventRecorder;
 import com.agentic.urlshortener.orchestration.reliability.FaultInjector;
@@ -101,6 +102,7 @@ public class RunCoordinator {
     private final FaultInjector faults;
     private final ReplanningService replanning;
     private final InputFingerprinter fingerprinter;
+    private final AutonomyBudget budget;
     private final Set<UUID> stopping = ConcurrentHashMap.newKeySet();
 
     public RunCoordinator(WorkflowRunRepository runs, StageNodeRepository nodes, StageAttemptRepository attempts,
@@ -110,7 +112,8 @@ public class RunCoordinator {
             ObjectProvider<ApplicationPlanePort> port, PermissionAudit permissionAudit, PolicyEvaluationRecorder policyRecorder,
             DecisionRepository decisions, StagePolicyProperties stagePolicies, FailureEventRecorder failureEvents,
             TaskScheduler scheduler, CompensationCoordinator compensations, FaultInjector faults, ReplanningService replanning,
-            InputFingerprinter fingerprinter, OrchestrationMeters meters) {
+            InputFingerprinter fingerprinter, OrchestrationMeters meters, AutonomyBudget budget) {
+        this.budget = budget;
         this.fingerprinter = fingerprinter;
         this.replanning = replanning;
         this.faults = faults;
@@ -152,6 +155,12 @@ public class RunCoordinator {
 
     /** What one scheduling cycle produced: attempts to dispatch, and when the earliest waiting retry is due. */
     private record Scheduled(List<Dispatch> dispatches, Instant wakeUpAt) {
+    }
+
+    /** What starting one stage produced: an attempt to dispatch, nothing to dispatch, or a refusal because the budget is spent. */
+    private record Start(Dispatch dispatch, String budgetExhaustion) {
+
+        static final Start NONE = new Start(null, null);
     }
 
     /** A result that arrived after its attempt timed out: recorded, never applied (FR-REL-09). */
@@ -265,6 +274,7 @@ public class RunCoordinator {
         RequirementVersion requirement = currentRequirement(run);
         long cycle = attempts.maxSchedulingCycle(runId) + 1;
         List<Dispatch> dispatches = new ArrayList<>();
+        String budgetExhaustion = null;
 
         boolean changed;
         do {
@@ -279,14 +289,23 @@ public class RunCoordinator {
             for (StageNode node : plan) {
                 boolean retryDue = node.getStatus() == StageStatus.RETRY_WAIT && !node.getNextAttemptAt().isAfter(now);
                 if (node.getStatus() == StageStatus.READY || retryDue) {
-                    Dispatch dispatch = start(run, node, requirement, cycle, now);
-                    if (dispatch != null) {
-                        dispatches.add(dispatch);
+                    Start started = start(run, node, requirement, cycle, now);
+                    if (started.budgetExhaustion() != null) {
+                        budgetExhaustion = started.budgetExhaustion();
+                        break;
+                    }
+                    if (started.dispatch() != null) {
+                        dispatches.add(started.dispatch());
                     }
                     changed = true;
                 }
             }
-        } while (changed);
+        } while (changed && budgetExhaustion == null);
+
+        if (budgetExhaustion != null) {
+            exceedBudget(runId, dispatches, budgetExhaustion, now);
+            return new Scheduled(List.of(), null);
+        }
 
         if (deriveRunStatus(run, plan, now)) {
             return new Scheduled(List.of(), null);
@@ -295,6 +314,22 @@ public class RunCoordinator {
                 .filter(n -> n.getStatus() == StageStatus.RETRY_WAIT).map(StageNode::getNextAttemptAt)
                 .min(Comparator.naturalOrder()).orElse(null);
         return new Scheduled(dispatches, wakeUpAt);
+    }
+
+    /**
+     * The autonomy budget is spent (FR-ORC-18): attempts started earlier in this cycle are never dispatched
+     * (safe-stop allows no new dispatch), so they are discarded, and the run safe-stops.
+     */
+    private void exceedBudget(UUID runId, List<Dispatch> undispatched, String reason, Instant now) {
+        for (Dispatch dispatch : undispatched) {
+            StageType type = dispatch.context().stageType();
+            attemptFor(runId, type, dispatch.generation(), dispatch.attemptNo())
+                    .finish(AttemptOutcome.DISCARDED, null, "not dispatched: " + reason, now);
+            meters.attemptFinished(type, AttemptOutcome.DISCARDED.name(), Duration.ZERO);
+            audit.system(runId, "ATTEMPT_DISCARDED", type.name(), "DISCARDED", "not dispatched: " + reason,
+                    Map.of("attemptNo", dispatch.attemptNo(), "generation", dispatch.generation()));
+        }
+        safeStop(runId, "AUTONOMY_BUDGET_EXCEEDED", reason, ActorType.SYSTEM, RunAudit.SYSTEM, now);
     }
 
     /**
@@ -423,18 +458,18 @@ public class RunCoordinator {
         return true;
     }
 
-    private Dispatch start(WorkflowRun run, StageNode node, RequirementVersion requirement, long cycle, Instant now) {
+    private Start start(WorkflowRun run, StageNode node, RequirementVersion requirement, long cycle, Instant now) {
         UUID runId = run.getId();
         StageType type = node.getStageKey();
         if (type.isGate()) {
             if (carryOverApproval(runId, node, now)) {
-                return null;
+                return Start.NONE;
             }
             Instant deadline = now.plus(gateDeadline(run));
             node.awaitDecision(type.gateAwaiting(), deadline);
             audit.transition(runId, type.name(), StageStatus.READY, StageStatus.AWAITING_DECISION,
                     "waiting for a " + type.requiredRole() + " decision until " + deadline);
-            return null;
+            return Start.NONE;
         }
         boolean fallback = node.isDegraded();
         Optional<StageAgent> selected = fallback ? registry.fallback(type) : registry.primary(type);
@@ -443,7 +478,11 @@ public class RunCoordinator {
         String fingerprint = fingerprinter.fingerprint(requirement.getFingerprint(), inputs, agentId);
         if (!fallback && node.getStatus() == StageStatus.READY && node.getAttempts() == 0 && node.getGeneration() > 1
                 && reuse(run, node, agentId, fingerprint, inputs, cycle, now)) {
-            return null;
+            return Start.NONE;
+        }
+        Optional<String> exhaustion = budget.exhaustion(run);
+        if (exhaustion.isPresent()) {
+            return new Start(null, exhaustion.get());
         }
         StageStatus from = node.getStatus();
         boolean recovering = node.getAttempts() > 0;
@@ -464,14 +503,15 @@ public class RunCoordinator {
         if (selected.isEmpty()) {
             failAttempt(run, node, attemptFor(runId, type, node.getGeneration(), attemptNo), FailureClass.PERMANENT,
                     AttemptOutcome.FAILED_PERMANENT, "no agent is registered for " + type, now);
-            return null;
+            return Start.NONE;
         }
         StageAgent agent = selected.get();
         StageContext context = new StageContext(runId, type, node.getGeneration(), attemptNo, requirement.getVersion(),
                 requirement.getContent(), inputs, run.getPolicySetVersion(), scopedPort(runId, type, agent),
                 () -> stopping.contains(runId));
         StageAgent effective = fault.map(f -> faults.inject(agent, f)).orElse(agent);
-        return new Dispatch(effective, context, node.getGeneration(), attemptNo, cycle, stagePolicies.policyFor(type).timeout());
+        return new Start(new Dispatch(effective, context, node.getGeneration(), attemptNo, cycle, stagePolicies.policyFor(type).timeout()),
+                null);
     }
 
     private void apply(Dispatch dispatch, StageResult result) {

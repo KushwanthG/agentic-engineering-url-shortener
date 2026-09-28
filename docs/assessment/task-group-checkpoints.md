@@ -362,3 +362,18 @@ security rules unchanged (deny-by-default; redirect route public by design); all
 | 7 | Validation commands executed | OSV-Scanner v2.6.0 (checksum-verified) → 3 CRITICAL Tomcat 11.0.24 advisories; after the upgrade, `mvnw -B -ntp clean verify` → 530 tests, 0 failures; re-scan → no issues |
 | 11 | Deviations | **Dependency change.** Overriding a Spring Boot-managed version (Tomcat) departs from ADR-002's "Boot-managed versions" approach. It is recorded for the candidate's review, and must be revisited when Spring Boot is upgraded |
 | 18 | Human approval required | review of the Tomcat override (gate register, T128 row) |
+
+---
+
+## Checkpoint: T074 — autonomy budget (FR-ORC-18, NFR-AUT-02)
+
+| # | Item | Record |
+|---|------|--------|
+| 1 | Completed tasks | T074, withdrawn from the SD-1 deferrals at the candidate's instruction |
+| 4 | Files created or changed | `reliability/AutonomyBudget.java` (new), `engine/RunCoordinator.java` (budget check before each dispatch, trigger `AUTONOMY_BUDGET_EXCEEDED`), `AutonomyBudgetTest` (new), `TraceabilityMatrixTest` (FR-ORC-18 removed from DEFERRED), `SafeStopServiceTest` (comment); `tasks.md`, `reliability.md` §5 and §9, `convergence-report.md`, `release-readiness.md` (O-1 resolved), `risk-register.md` (R-01, R-17, R-36), `final-engineering-summary.md`, `testing-limitations-tradeoffs.md`, `timebox-and-scope.md`, gate register |
+| 7 | Validation commands executed | `mvnw test -Dtest=AutonomyBudgetTest` (red, see tdd-evidence.md), then `mvnw -B -ntp verify` → 533 tests, 0 failures, BUILD SUCCESS |
+| 8 | Actual outcomes | a run whose budget is spent starts no further attempt and safe-stops with the trigger and a reason naming the exhausted limit (attempts or processing time). The production default limits (60 attempts, PT10M) did not stop any existing scenario, drill, or e2e run |
+| 11 | Deviations | (a) **Same-cycle attempts.** Attempts created earlier in the scheduling cycle that exhausts the budget are finished `DISCARDED` ("not dispatched: …") instead of being dispatched, because safe-stop allows no new dispatch. (b) **Reuse first.** A reused stage (FR-RPL-05) consumes no attempt, so reuse is checked before the budget, as in plan.md §3. (c) **Processing time** is the sum of attempt durations, so parallel attempts add up; time waiting for humans or for retry backoff is not counted |
+| 12 | New risks | none; R-17 and R-36 are now mitigated, and R-01 is narrowed to FR-RPL-06 |
+| 16 | Commit message | `feat(reliability): enforce the per-run autonomy budget with safe-stop (T074)` |
+| 18 | Human approval required | review of deviations (a)–(c) (gate register, T074 row); SD-1 remains for confirmation at G6 |

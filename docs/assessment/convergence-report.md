@@ -11,7 +11,7 @@ The skill found 7 findings. Four were appended as **Phase 11: Convergence** (T13
 | ID | Gap | Severity | Source | Disposition |
 |---|---|---|---|---|
 | F1 | contradicts | **CRITICAL** | Constitution V (no credentials in logs) | Spring Boot's generated default-user password was logged at every startup (seen in the T120 demo log). **Fixed**: T133, commit `2a2a0bf`, `StartupLogSecurityTest` (red, then green) |
-| F2 | missing | HIGH | FR-ORC-18 | Deferred: T074 (SD-1) |
+| F2 | missing | HIGH | FR-ORC-18 | T074 (deferred by SD-1), completed afterwards at the candidate's instruction: `AutonomyBudget`, `AutonomyBudgetTest` (red, then green) |
 | F3 | missing | HIGH | FR-RPL-06 | Deferred: T096 (SD-1) |
 | F4 | partial | HIGH | Constitution V (dependency-risk check), NFR-SEC-05 | T128 (existing task), completed afterwards: 3 CRITICAL Tomcat 11.0.24 advisories fixed by upgrading to 11.0.26; re-scan clean |
 | F5 | partial | MEDIUM | NFR-PRF-01 | T134, **open**: see [performance.md](performance.md) |
@@ -48,7 +48,8 @@ performance measurement varies a lot between runs, so only a generous bound is a
 
 - **Tested ids.** `target/traceability/requirements-to-tests.md` lists 126 of 136 ids with at least
   one test class.
-- **Untested FRs.** Only FR-ORC-18 and FR-RPL-06 are untested; both are deferred.
+- **Untested FRs.** Only FR-RPL-06 is untested; it is deferred. (FR-ORC-18 was also untested and
+  deferred at convergence; T074 has since added `AutonomyBudgetTest`.)
 - **Ids without a tag.** Nine NFR and SC ids carry no tag and are verified by measurement or review:
   | Id | How it is covered |
   |---|---|
@@ -57,7 +58,7 @@ performance measurement varies a lot between runs, so only a generous bound is a
   | NFR-TST-02 | random-order run |
   | NFR-OBS-01 | T107 deferred |
   | NFR-MNT-02 | T114 deferred |
-  | NFR-AUT-02 | budget, T074 |
+  | NFR-AUT-02 | tagged since, by `AutonomyBudgetTest` (T074) |
   | SC-001 | quickstart validation |
   | SC-009 | evidence index, T109 deferred |
 

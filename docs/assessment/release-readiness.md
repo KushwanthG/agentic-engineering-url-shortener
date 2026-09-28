@@ -18,14 +18,14 @@ accepted exception. Both conditions hold today:
 
 | # | Item | Evidence | Needed for READY WITH ACCEPTED LIMITATIONS |
 |---|---|---|---|
-| O-1 | FR-ORC-18 autonomy budget not implemented (T074, SD-1) | `TraceabilityMatrixTest` DEFERRED list; [risk R-01](risk-register.md) | implement T074, or accept the limitation at G6 |
-| O-2 | FR-RPL-06 ambiguity found mid-run not implemented (T096, SD-1) | same | implement T096, or accept the limitation |
+| O-1 | ~~FR-ORC-18 autonomy budget not implemented (T074, SD-1)~~ **Resolved**: T074 implemented (`AutonomyBudgetTest`) | `TraceabilityMatrixTest` now lists FR-ORC-18 as VERIFIED | none |
+| O-2 | FR-RPL-06 ambiguity found mid-run not implemented (T096, SD-1) | `TraceabilityMatrixTest` DEFERRED list; [risk R-01](risk-register.md) | implement T096, or accept the limitation |
 | O-3 | Performance targets PVT-19 and PVT-20 not met (NFR-PRF-01, T134 open) | [performance.md](performance.md) | accept as a demonstration limitation, or complete T134 |
 | O-4 | Deviations awaiting review in the gate register (Phase 4 to Phase 10a) | [gate register](../governance/human-gate-register.md), lower table | review and decide each |
 
-If the candidate ratifies G1–G5, accepts O-1, O-2, and O-3 as limitations, and
+If the candidate ratifies G1–G5, accepts O-2 and O-3 as limitations, and
 decides O-4, the proposal would become **READY WITH ACCEPTED LIMITATIONS**. It cannot become READY
-while O-1 and O-2 are open, because they are specification MUSTs.
+while O-2 is open, because it is a specification MUST.
 
 ## Mandatory validation status
 
